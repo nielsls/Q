@@ -15,12 +15,14 @@
 '   - =Q("a.*b",A1:D5,F1:I5)   -> element wise multiplication of cells A1:D5 and F1:I5
 '   - =Q("a([1 3],end)",A1:D5) -> 2x1 matrix with the last entries in row 1 and 3 of cells A1:D5
 '
-' Supported MATLAB-like features:
-'   - All standard operators: :,::,+,-,*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'
-'   - Most used functions: eye,zeros,ones,sum,cumsum,cumprod,prod,
-'     mean,median,prctile,std,isequal,fix,rand,randn,find,sqrt,exp,inv...
-'   - Indexing via fx. a(2,:) or a(5,3:end)
+' Features:
+'   - All standard MATLAB operators: :,::,+,-,*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'
+'   - Most used MATLAB functions: eye,zeros,ones,sum,cumsum,cumprod,prod,
+'     mean,median,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp,inv...
+'   - Indexing via a(2,:) or a(5,3:end)
 '   - Concatenate matrices with '[]', i.e. [ a b; c d]
+'   - Excel functions: if,iferror
+'   - Prefix function calls with ! to call external VBA functions
 '
 ' 2014, Niels Lykke Sørensen, niesre@danskebank.dk
 
@@ -29,9 +31,9 @@ Option Base 1
 
 Private Const REGEXPATTERN = _
     " |\""[^\""]*\""|\(|\)|\[|\]|\,|\;" & _
-    "|[a-z][a-z0-9_]*|[0-9]+\.?[0-9]*" & _
+    "|[a-zA-Z][a-zA-Z0-9_]*|[0-9]+\.?[0-9]*" & _
     "|\|\||&&|\||&|<>|~=|<=|>=|<|>|==|=" & _
-    "|\:|\+|\-|\*|\.\*|\/|\.\/|\^|\.\^|\'|~|#"
+    "|\:|\+|\-|\*|\.\*|\/|\.\/|\^|\.\^|\'|~|#|!"
 Private arguments() As Variant
 Private tokens As Object
 Private tokenIndex As Long
@@ -41,7 +43,7 @@ Private errorMsg As String
 ' Entry point - the only public function in the library
 Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     On Error GoTo ErrorHandler
-    
+
     arguments = args
     tokenIndex = 0
     endValues = Empty
@@ -64,7 +66,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     End With
 
     Dim root As Variant
-    root = Parse_Binary()
+    root = parse_binary()
     
     'Utils_DumpTree root    'Uncomment for debugging
 
@@ -97,7 +99,7 @@ End Function
 
 'Returns true if token is a suitable operator
 'op = Array( <function name>, <precedence level>, <left associative> )
-Private Function Parse_FindOp(token As String, opType As String, ByRef op As Variant) As Boolean
+Private Function parse_findOp(token As String, opType As String, ByRef op As Variant) As Boolean
     op = Null
     
     Select Case opType
@@ -132,6 +134,7 @@ Private Function Parse_FindOp(token As String, opType As String, ByRef op As Var
                 Case "-": op = "uminus"
                 Case "~": op = "negate"
                 Case "#": op = "numel"
+                Case "!": op = "extern"
             End Select
             
         Case "unarypostfix"
@@ -140,22 +143,22 @@ Private Function Parse_FindOp(token As String, opType As String, ByRef op As Var
             End Select
     End Select
     
-    Parse_FindOp = Not IsNull(op)
+    parse_findOp = Not IsNull(op)
 End Function
 
 '******************
 '*** BUILD TREE ***
 '******************
-Private Function Parse_Matrix() As Variant
+Private Function parse_matrix() As Variant
     Do While Tokens_Current() <> "]"
-        Utils_Stack_Push Parse_List(True), Parse_Matrix
+        Utils_Stack_Push parse_list(True), parse_matrix
         If Tokens_Current() = ";" Then Tokens_Advance
     Loop
 End Function
 
-Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Variant
+Private Function parse_list(Optional isSpaceSeparator As Boolean = False) As Variant
     Do
-        Utils_Stack_Push Parse_Binary(), Parse_List
+        Utils_Stack_Push parse_binary(), parse_list
         Select Case Tokens_Current()
             Case ";", ")", "]": Exit Do
             Case ",": Tokens_Advance
@@ -164,34 +167,34 @@ Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Var
     Loop While True
 End Function
 
-Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
-    Parse_Binary = Parse_Prefix()
-    Dim op: Do While Parse_FindOp(Tokens_Current(), "binary", op)
+Private Function parse_binary(Optional lastPrec As Long = -999) As Variant
+    parse_binary = parse_prefix()
+    Dim op: Do While parse_findOp(Tokens_Current(), "binary", op)
         If op(2) + CLng(op(3)) < lastPrec Then Exit Do
         Tokens_Advance
-        Parse_Binary = Array("op_" & op(1), Array(Parse_Binary, Parse_Binary(CLng(op(2)))))
+        parse_binary = Array("op_" & op(1), Array(parse_binary, parse_binary(CLng(op(2)))))
     Loop
 End Function
 
-Private Function Parse_Prefix() As Variant
+Private Function parse_prefix() As Variant
     Dim op
-    If Not Parse_FindOp(Tokens_Current(), "unaryprefix", op) Then
-        Parse_Prefix = Parse_Postfix()
+    If Not parse_findOp(Tokens_Current(), "unaryprefix", op) Then
+        parse_prefix = parse_postfix()
     Else
         Tokens_Advance
-        Parse_Prefix = Array("op_" & op, Array(Parse_Prefix()))
+        parse_prefix = Array("op_" & op, Array(parse_prefix()))
     End If
 End Function
 
-Private Function Parse_Postfix() As Variant
-    Parse_Postfix = Parse_Atomic
+Private Function parse_postfix() As Variant
+    parse_postfix = parse_atomic
     Dim op: Do
-        If Parse_FindOp(Tokens_Current(), "unarypostfix", op) Then
-            Parse_Postfix = Array("op_" & op, Array(Parse_Postfix))
+        If parse_findOp(Tokens_Current(), "unarypostfix", op) Then
+            parse_postfix = Array("op_" & op, Array(parse_postfix))
             Tokens_Advance
         ElseIf Tokens_Current() = "(" Then
             Tokens_Advance
-            Parse_Postfix = Array("eval_index", Array(Parse_Postfix, Parse_List()))
+            parse_postfix = Array("eval_index", Array(parse_postfix, parse_list()))
             Tokens_AssertAndAdvance ")"
         Else
             Exit Do
@@ -199,61 +202,63 @@ Private Function Parse_Postfix() As Variant
     Loop While True
 End Function
 
-Private Function Parse_Atomic() As Variant
+Private Function parse_atomic() As Variant
     Dim token: token = Tokens_Current()
     Select Case token
         Case ""
             Assert False, "Missing argument"
             
         Case "true"
-            Parse_Atomic = Array("eval_constant", Array(True))
+            parse_atomic = Array("eval_constant", Array(True))
             Tokens_Advance
             
         Case "false"
-            Parse_Atomic = Array("eval_constant", Array(False))
+            parse_atomic = Array("eval_constant", Array(False))
             Tokens_Advance
             
         Case "end"
-            Parse_Atomic = Array("eval_end", Array())
+            parse_atomic = Array("eval_end", Array())
             Tokens_Advance
             
         Case ":"
-            Parse_Atomic = Array("eval_colon", Array())
+            parse_atomic = Array("eval_colon", Array())
             Tokens_Advance
             
         Case "("
             Tokens_Advance
-            Parse_Atomic = Parse_Binary()
+            parse_atomic = parse_binary()
             Tokens_AssertAndAdvance ")"
             
         Case "["
             Tokens_Advance
-            Parse_Atomic = Array("eval_concat", Parse_Matrix())
+            parse_atomic = Array("eval_concat", parse_matrix())
             Tokens_AssertAndAdvance "]"
         
         Case Else
-            Select Case Asc(token)
+            Select Case Asc(token) 'filter on first char of token
                 Case Asc("""")
-                    Parse_Atomic = Array("eval_constant", Array(Mid(token, 2, Len(token) - 2)))
+                    parse_atomic = Array("eval_constant", Array(Mid(token, 2, Len(token) - 2)))
                     Tokens_Advance
+                    
                 Case Asc("0") To Asc("9")
-                    Parse_Atomic = Array("eval_constant", Array(Val(token)))
+                    parse_atomic = Array("eval_constant", Array(Val(token)))
                     Tokens_Advance
-                Case Asc("a") To Asc("z")
+                    
+                Case Asc("a") To Asc("z"), Asc("A") To Asc("Z")
                     If Len(token) = 1 Then
-                        Parse_Atomic = Array("eval_arg", Array(Asc(token) - Asc("a")))
+                        parse_atomic = Array("eval_arg", Array(Asc(token) - Asc("a")))
                         Tokens_Advance
                     Else
                         Tokens_Advance
                         Tokens_AssertAndAdvance "("
-                        Parse_Atomic = Array("fn_" & token, Parse_List())
+                        parse_atomic = Array("fn_" & token, parse_list())
                         Tokens_AssertAndAdvance ")"
                     End If
+                    
                 Case Else
                     Assert False, "Unexpected token: " & token
             End Select
     End Select
-        
 End Function
 
 '*********************
@@ -290,13 +295,13 @@ End Sub
 '*************
 '*** UTILS ***
 '*************
-Private Sub Utils_DumpTree(root As Variant, Optional spacer As String = "")
-    If Utils_Dimensions(root) > 0 Then
-        Dim r: For Each r In root
-            Utils_DumpTree r, spacer & "  "
-        Next r
+Private Sub Utils_DumpTree(tree As Variant, Optional spacer As String = "")
+    If Utils_Dimensions(tree) > 0 Then
+        Dim leaf: For Each leaf In tree
+            Utils_DumpTree leaf, spacer & "  "
+        Next leaf
     Else
-        Debug.Print spacer & root
+        Debug.Print spacer & tree
     End If
 End Sub
 
@@ -341,13 +346,13 @@ Private Sub Utils_Conform(ByRef v As Variant)
     End Select
 End Sub
 
-Private Function Utils_ForceMatrix(v As Variant)
+Private Sub Utils_ForceMatrix(v As Variant)
     If Utils_Dimensions(v) = 0 Then
-        ReDim r(1 To 1, 1 To 1) As Variant
+        Dim r: ReDim r(1 To 1, 1 To 1) As Variant
         r(1, 1) = v
         v = r
     End If
-End Function
+End Sub
 
 Private Function Utils_Rows(ByRef v As Variant) As Long
     Select Case Utils_Numel(v)
@@ -448,7 +453,10 @@ End Sub
 '**********************
 
 Private Function eval_tree(root As Variant) As Variant
-    If Left(root(1), 3) = "fn_" Then Utils_CalcArgs root(2)
+    ' Precalculate argument trees for all ordinary functions except if() and iferror()
+    If left(root(1), 3) = "fn_" And root(1) <> "fn_if" And root(1) <> "fn_iferror" Then
+        Utils_CalcArgs root(2)
+    End If
     eval_tree = Application.Run(root(1), root(2))
 End Function
 
@@ -626,6 +634,27 @@ End Function
 '*** OPERATORS ***
 '*****************
 
+Private Function op_extern(args As Variant) As Variant
+    args(1)(1) = Mid(args(1)(1), 4)
+    Dim a As Variant: a = args(1)(2)
+    Utils_CalcArgs a
+    Select Case UBound(a)
+        Case 0: op_extern = Application.Run(args(1)(1))
+        Case 1: op_extern = Application.Run(args(1)(1), a(1))
+        Case 2: op_extern = Application.Run(args(1)(1), a(1), a(2))
+        Case 3: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3))
+        Case 4: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4))
+        Case 5: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5))
+        Case 6: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6))
+        Case 7: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7))
+        Case 8: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8))
+        Case 9: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9))
+        Case 10: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9), a(10))
+        Case Else: Assert False, "Cannot evaluate " & args(1)(1) & ": Too many arguments"
+    End Select
+    Utils_Conform op_extern
+End Function
+
 ' Matches operator ||
 Private Function op_orshortcircuit(args As Variant) As Variant
     If CBool(eval_tree(args(1))) Then
@@ -795,7 +824,7 @@ Private Function op_negate(args As Variant) As Variant
         op_negate = Not CBool(args(1))
     Else
         Dim i As Long, j As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
         For i = 1 To UBound(r, 1)
             For j = 1 To UBound(r, 2)
                 r(i, j) = Not CBool(args(1)(i, j))
@@ -853,10 +882,6 @@ Private Function op_plus(args As Variant) As Variant
     Next x
     Utils_Conform r
     op_plus = r
-End Function
-
-Function asdfasdf(a As Variant) As Variant
-    asdfasdf = WorksheetFunction.IsNonText(a)
 End Function
 
 ' Matches unary operator +
@@ -1073,7 +1098,7 @@ Private Function fn_fix(args As Variant) As Variant
         fn_fix = WorksheetFunction.RoundDown(args(1), 0)
     Else
         Dim x As Long, y As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2)) As Variant
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2)) As Variant
         For x = 1 To UBound(r, 1)
             For y = 1 To UBound(r, 2)
                 r(x, y) = WorksheetFunction.RoundDown(args(1)(x, y), 0)
@@ -1088,7 +1113,7 @@ Private Function fn_round(args As Variant) As Variant
         fn_round = WorksheetFunction.Round(args(1), 0)
     Else
         Dim x As Long, y As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2)) As Variant
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2)) As Variant
         For x = 1 To UBound(r, 1)
             For y = 1 To UBound(r, 2)
                 r(x, y) = WorksheetFunction.Round(args(1)(x, y), 0)
@@ -1112,7 +1137,7 @@ Private Function fn_exp(args As Variant) As Variant
         fn_exp = Exp(args(1))
     Else
         Dim i As Long, j As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
         For i = 1 To UBound(r, 1)
             For j = 1 To UBound(r, 2)
                 r(i, j) = Exp(args(1)(i, j))
@@ -1128,7 +1153,7 @@ Private Function fn_log(args As Variant) As Variant
         fn_log = Log(args(1))
     Else
         Dim i As Long, j As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
         For i = 1 To UBound(r, 1)
             For j = 1 To UBound(r, 2)
                 r(i, j) = Log(args(1)(i, j))
@@ -1143,7 +1168,7 @@ Private Function fn_sqrt(args As Variant) As Variant
         fn_sqrt = Sqr(args(1))
     Else
         Dim i As Long, j As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
         For i = 1 To UBound(r, 1)
             For j = 1 To UBound(r, 2)
                 r(i, j) = Sqr(args(1)(i, j))
@@ -1414,7 +1439,7 @@ Private Function fn_size(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_size = 1
     Else
-        ReDim r(1, 2)
+        Dim r: ReDim r(1, 2)
         r(1, 1) = Utils_Rows(args(1))
         r(1, 2) = Utils_Cols(args(1))
         fn_size = r
@@ -1556,3 +1581,74 @@ Private Function fn_tostring(args As Variant) As Variant
     Utils_Conform r
     fn_tostring = r
 End Function
+
+' X = if(a,B,C)
+'
+' X = if(a,B,C) returns B if a evaluates to true; otherwise C.
+' The if() function works more as an operator implementing short circuiting.
+' I.e. if C is an expression it is not evaluated unless a is true and vice versa.
+Private Function fn_if(args As Variant) As Variant
+    If CBool(eval_tree(args(1))) Then
+        fn_if = eval_tree(args(2))
+    Else
+        fn_if = eval_tree(args(3))
+    End If
+End Function
+
+' X = iferror(A,B)
+'
+' X = iferror(A,B) returns A if the evaluation of A does not result in a error; then B is returned instead.
+Private Function fn_iferror(args As Variant) As Variant
+    On Error GoTo ErrorHandler:
+    fn_iferror = eval_tree(args(1))
+    Exit Function
+ErrorHandler:
+    fn_iferror = eval_tree(args(2))
+End Function
+
+' Count the number of elements that evaluates to false
+Private Function fn_count(args As Variant) As Variant
+
+End Function
+
+' Returns 1st differences for each column
+Private Function fn_diff(args As Variant) As Variant
+
+End Function
+
+' Filter input so only one occurrence of each element is left
+Private Function fn_unique(args As Variant) As Variant
+
+End Function
+
+Private Function fn_sort(args As Variant) As Variant
+    args = CVar(args)
+    utils_qsort args, 1, UBound(args, 1)
+    fn_sort = args
+End Function
+
+' Implementation of quick-sort
+Private Function utils_qsort(arr As Variant, first As Long, last As Long)
+    Dim tmp As Variant
+    Dim pivot As Variant: pivot = arr(first, 1)
+    Dim left As Long: left = first
+    Dim right As Long: right = last
+    While left <= right
+        While arr(left, 1) < pivot
+            left = left + 1
+        Wend
+        While arr(right, 1) > pivot
+            right = right - 1
+        Wend
+        If left <= right Then
+            tmp = arr(left, 1)
+            arr(left, 1) = arr(right, 1)
+            arr(right, 1) = tmp
+            left = left + 1
+            right = right - 1
+        End If
+    Wend
+    If first < right Then utils_qsort arr, first, right
+    If left < last Then utils_qsort arr, left, last
+End Function
+

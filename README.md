@@ -4,7 +4,7 @@ Q
 A MATLAB-like matrix parser for Microsoft Excel
 
 Q features a single public function, Q(), containing an expression parser.
-The parser is able to parse and evaluate a subset of the MATLAB programming language.
+Q() is able to parse and evaluate a subset of the MATLAB programming language.
 It features almost all MATLAB operators, selected standard functions
 and has complete support for submatrices, '()', and concatenation, '[]'.
 
@@ -19,8 +19,10 @@ Example usage:
 Supported MATLAB-like features:
   - All standard operators: :,::,+,-,*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'
   - Most used functions: eye,zeros,ones,sum,cumsum,cumprod,prod,
-    mean,median,prctile,std,isequal,fix,rand,randn,find,sqrt,exp,inv...
+    mean,median,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp,inv...
   - Indexing via fx. a(2,:) or a(5,3:end)
   - Concatenate matrices with '[]', i.e. [ a b; c d]
+  - Excel functions: if,iferror
+  - Prefix function calls with ! to call external VBA functions not found in Q.
 
-2014, Niels Lykke Sørensen, niesre@danskebank.dk
+2014, Niels Lykke Sørensen

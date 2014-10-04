@@ -22,9 +22,9 @@
 '   - Indexing via a(2,:) or a(5,3:end)
 '   - Concatenate matrices with '[]', i.e. [ a b; c d]
 '   - Excel functions: if,iferror
-'   - Prefix function calls with ! to call external VBA functions
+'   - Prefix function calls with ! to call external VBA functions not found in Q.
 '
-' 2014, Niels Lykke Sørensen, niesre@danskebank.dk
+' 2014, Niels Lykke Sørensen
 
 Option Explicit
 Option Base 1
@@ -66,7 +66,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     End With
 
     Dim root As Variant
-    root = parse_binary()
+    root = Parse_Binary()
     
     'Utils_DumpTree root    'Uncomment for debugging
 
@@ -99,7 +99,7 @@ End Function
 
 'Returns true if token is a suitable operator
 'op = Array( <function name>, <precedence level>, <left associative> )
-Private Function parse_findOp(token As String, opType As String, ByRef op As Variant) As Boolean
+Private Function Parse_FindOp(token As String, opType As String, ByRef op As Variant) As Boolean
     op = Null
     
     Select Case opType
@@ -143,22 +143,22 @@ Private Function parse_findOp(token As String, opType As String, ByRef op As Var
             End Select
     End Select
     
-    parse_findOp = Not IsNull(op)
+    Parse_FindOp = Not IsNull(op)
 End Function
 
 '******************
 '*** BUILD TREE ***
 '******************
-Private Function parse_matrix() As Variant
+Private Function Parse_Matrix() As Variant
     Do While Tokens_Current() <> "]"
-        Utils_Stack_Push parse_list(True), parse_matrix
+        Utils_Stack_Push Parse_List(True), Parse_Matrix
         If Tokens_Current() = ";" Then Tokens_Advance
     Loop
 End Function
 
-Private Function parse_list(Optional isSpaceSeparator As Boolean = False) As Variant
+Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Variant
     Do
-        Utils_Stack_Push parse_binary(), parse_list
+        Utils_Stack_Push Parse_Binary(), Parse_List
         Select Case Tokens_Current()
             Case ";", ")", "]": Exit Do
             Case ",": Tokens_Advance
@@ -167,34 +167,34 @@ Private Function parse_list(Optional isSpaceSeparator As Boolean = False) As Var
     Loop While True
 End Function
 
-Private Function parse_binary(Optional lastPrec As Long = -999) As Variant
-    parse_binary = parse_prefix()
-    Dim op: Do While parse_findOp(Tokens_Current(), "binary", op)
+Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
+    Parse_Binary = Parse_Prefix()
+    Dim op: Do While Parse_FindOp(Tokens_Current(), "binary", op)
         If op(2) + CLng(op(3)) < lastPrec Then Exit Do
         Tokens_Advance
-        parse_binary = Array("op_" & op(1), Array(parse_binary, parse_binary(CLng(op(2)))))
+        Parse_Binary = Array("op_" & op(1), Array(Parse_Binary, Parse_Binary(CLng(op(2)))))
     Loop
 End Function
 
-Private Function parse_prefix() As Variant
+Private Function Parse_Prefix() As Variant
     Dim op
-    If Not parse_findOp(Tokens_Current(), "unaryprefix", op) Then
-        parse_prefix = parse_postfix()
+    If Not Parse_FindOp(Tokens_Current(), "unaryprefix", op) Then
+        Parse_Prefix = Parse_Postfix()
     Else
         Tokens_Advance
-        parse_prefix = Array("op_" & op, Array(parse_prefix()))
+        Parse_Prefix = Array("op_" & op, Array(Parse_Prefix()))
     End If
 End Function
 
-Private Function parse_postfix() As Variant
-    parse_postfix = parse_atomic
+Private Function Parse_Postfix() As Variant
+    Parse_Postfix = Parse_Atomic
     Dim op: Do
-        If parse_findOp(Tokens_Current(), "unarypostfix", op) Then
-            parse_postfix = Array("op_" & op, Array(parse_postfix))
+        If Parse_FindOp(Tokens_Current(), "unarypostfix", op) Then
+            Parse_Postfix = Array("op_" & op, Array(Parse_Postfix))
             Tokens_Advance
         ElseIf Tokens_Current() = "(" Then
             Tokens_Advance
-            parse_postfix = Array("eval_index", Array(parse_postfix, parse_list()))
+            Parse_Postfix = Array("eval_index", Array(Parse_Postfix, Parse_List()))
             Tokens_AssertAndAdvance ")"
         Else
             Exit Do
@@ -202,56 +202,56 @@ Private Function parse_postfix() As Variant
     Loop While True
 End Function
 
-Private Function parse_atomic() As Variant
+Private Function Parse_Atomic() As Variant
     Dim token: token = Tokens_Current()
     Select Case token
         Case ""
             Assert False, "Missing argument"
             
         Case "true"
-            parse_atomic = Array("eval_constant", Array(True))
+            Parse_Atomic = Array("eval_constant", Array(True))
             Tokens_Advance
             
         Case "false"
-            parse_atomic = Array("eval_constant", Array(False))
+            Parse_Atomic = Array("eval_constant", Array(False))
             Tokens_Advance
             
         Case "end"
-            parse_atomic = Array("eval_end", Array())
+            Parse_Atomic = Array("eval_end", Array())
             Tokens_Advance
             
         Case ":"
-            parse_atomic = Array("eval_colon", Array())
+            Parse_Atomic = Array("eval_colon", Array())
             Tokens_Advance
             
         Case "("
             Tokens_Advance
-            parse_atomic = parse_binary()
+            Parse_Atomic = Parse_Binary()
             Tokens_AssertAndAdvance ")"
             
         Case "["
             Tokens_Advance
-            parse_atomic = Array("eval_concat", parse_matrix())
+            Parse_Atomic = Array("eval_concat", Parse_Matrix())
             Tokens_AssertAndAdvance "]"
         
         Case Else
             Select Case Asc(token) 'filter on first char of token
                 Case Asc("""")
-                    parse_atomic = Array("eval_constant", Array(Mid(token, 2, Len(token) - 2)))
+                    Parse_Atomic = Array("eval_constant", Array(Mid(token, 2, Len(token) - 2)))
                     Tokens_Advance
                     
                 Case Asc("0") To Asc("9")
-                    parse_atomic = Array("eval_constant", Array(Val(token)))
+                    Parse_Atomic = Array("eval_constant", Array(Val(token)))
                     Tokens_Advance
                     
                 Case Asc("a") To Asc("z"), Asc("A") To Asc("Z")
                     If Len(token) = 1 Then
-                        parse_atomic = Array("eval_arg", Array(Asc(token) - Asc("a")))
+                        Parse_Atomic = Array("eval_arg", Array(Asc(token) - Asc("a")))
                         Tokens_Advance
                     Else
                         Tokens_Advance
                         Tokens_AssertAndAdvance "("
-                        parse_atomic = Array("fn_" & token, parse_list())
+                        Parse_Atomic = Array("fn_" & token, Parse_List())
                         Tokens_AssertAndAdvance ")"
                     End If
                     
@@ -322,6 +322,10 @@ Private Function Utils_Numel(v As Variant) As Long
         Case 2: Utils_Numel = UBound(v, 1) * UBound(v, 2)
         Case Else: Assert False, "Dimension > 2"
     End Select
+End Function
+
+Private Function Utils_IsNA(v As Variant) As Boolean
+    Utils_IsNA = Utils_Numel(v) = 0
 End Function
 
 Private Sub Utils_Conform(ByRef v As Variant)
@@ -1062,37 +1066,45 @@ Private Function fn_islogical(args As Variant) As Variant
     End If
 End Function
 
+' I = find(X)
+'
+' I = find(A) locates all nonzero elements of array X, and returns the linear indices
+' of those elements in vector I. If X is a row vector, then I is a row vector;
+' otherwise, I is a column vector. If X contains no nonzero elements or is an empty array,
+' then I is an empty array.
 Private Function fn_find(args As Variant) As Variant
-    If Utils_Dimensions(args(1)) = 0 Then
-        If CDbl(args(1)) = 0 Then fn_find = Empty Else fn_find = 1
+    Dim rows As Long, cols As Long
+    Utils_Size args(1), rows, cols
+    If rows <= 1 And cols <= 1 Then
+        If CDbl(args(1)) = 0 Then fn_find = [NA()] Else fn_find = 1
     Else
         Dim counter As Long, i As Long, j As Long
-        For i = 1 To UBound(args(1), 1)
-            For j = 1 To UBound(args(1), 2)
+        For i = 1 To rows
+            For j = 1 To cols
                 If CDbl(args(1)(i, j)) <> 0 Then counter = counter + 1
             Next j
         Next i
-        If counter = 0 Then
-            fn_find = [NA()]
-            Exit Function
-        End If
-        Dim isRowVec As Long: isRowVec = -(UBound(args(1), 1) = 1)
+        If counter = 0 Then fn_find = [NA()]: Exit Function
+        Dim isRowVec As Long: isRowVec = -(rows = 1)
         Dim r: ReDim r(isRowVec + (1 - isRowVec) * counter, 1 - isRowVec + isRowVec * counter)
         counter = 0
-        For j = 1 To UBound(args(1), 2)
-            For i = 1 To UBound(args(1), 1)
+        For i = 1 To rows
+            For j = 1 To rows
                 If CDbl(args(1)(i, j)) <> 0 Then
                     counter = counter + 1
                     r(isRowVec + (1 - isRowVec) * counter, 1 - isRowVec + isRowVec * counter) _
-                        = (j - 1) * UBound(args(1), 1) + i
+                        = (j - 1) * rows + i
                 End If
-            Next i
-        Next j
+            Next j
+        Next i
         Utils_Conform r
         fn_find = r
     End If
 End Function
 
+' X = fix(A)
+'
+' X = fix(A) rounds the elements of A towards 0.
 Private Function fn_fix(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_fix = WorksheetFunction.RoundDown(args(1), 0)
@@ -1108,6 +1120,9 @@ Private Function fn_fix(args As Variant) As Variant
     End If
 End Function
 
+' X = round(A)
+'
+' X = round(A) rounds the elements of A towards the nearest integer.
 Private Function fn_round(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_round = WorksheetFunction.Round(args(1), 0)
@@ -1132,6 +1147,9 @@ Private Function fn_inv(args As Variant) As Variant
     End If
 End Function
 
+' X = exp(A)
+'
+' X = exp(A) returns the exponential for each element of A.
 Private Function fn_exp(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_exp = Exp(args(1))
@@ -1147,7 +1165,9 @@ Private Function fn_exp(args As Variant) As Variant
     End If
 End Function
 
-' The natural logarithm
+' X = log(A)
+'
+' X = log(A) returns the natural logarithm of the elements of A.
 Private Function fn_log(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_log = Log(args(1))
@@ -1163,6 +1183,9 @@ Private Function fn_log(args As Variant) As Variant
     End If
 End Function
 
+' X = sqrt(A)
+'
+' X = sqrt(A) returns the square root of the elements of A.
 Private Function fn_sqrt(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_sqrt = Sqr(args(1))
@@ -1178,14 +1201,23 @@ Private Function fn_sqrt(args As Variant) As Variant
     End If
 End Function
 
+' r = rows(A)
+'
+' r = rows(A) returns the number of rows in A.
 Private Function fn_rows(args As Variant) As Variant
     fn_rows = Utils_Rows(args(1))
 End Function
 
+' c = cols(A)
+'
+' c = cols(A) returns the number of columns in A.
 Private Function fn_cols(args As Variant) As Variant
     fn_cols = Utils_Cols(args(1))
 End Function
 
+' n = numel(A)
+'
+' n = numel(A) returns the number of elements in A.
 Private Function fn_numel(args As Variant) As Variant
     fn_numel = Utils_Numel(args(1))
 End Function
@@ -1368,6 +1400,8 @@ Private Function fn_prod(args As Variant) As Variant
     fn_prod = r
 End Function
 
+' X = mean(A)
+' X = mean(A,dim)
 Private Function fn_mean(args As Variant) As Variant
     Dim i As Long, x As Long, r As Variant
     Utils_ForceMatrix args(1)
@@ -1381,6 +1415,8 @@ Private Function fn_mean(args As Variant) As Variant
     fn_mean = r
 End Function
 
+' X = median(A)
+' X = median(A,dim)
 Private Function fn_median(args As Variant) As Variant
     Dim i As Long, x As Long, r As Variant
     Utils_ForceMatrix args(1)
@@ -1394,6 +1430,9 @@ Private Function fn_median(args As Variant) As Variant
     fn_median = r
 End Function
 
+' X = prctile(A)
+' X = prctile(A,p)
+' X = prctile(A,p,dim)
 Private Function fn_prctile(args As Variant) As Variant
     Dim i As Long, x As Long, r As Variant
     Utils_ForceMatrix args(1)
@@ -1407,6 +1446,7 @@ Private Function fn_prctile(args As Variant) As Variant
     fn_prctile = r
 End Function
 
+' b = isequal(A,B)
 Private Function fn_isequal(args As Variant) As Variant
     fn_isequal = False
     Dim dim1 As Long: dim1 = Utils_Dimensions(args(1))
@@ -1427,6 +1467,7 @@ Private Function fn_isequal(args As Variant) As Variant
     End If
 End Function
 
+' X = isempty(A)
 Private Function fn_isempty(args As Variant) As Variant
     fn_isempty = False
     If Utils_Dimensions(args(1)) = 0 Then
@@ -1434,16 +1475,15 @@ Private Function fn_isempty(args As Variant) As Variant
     End If
 End Function
 
+' X = size(A)
+'
+' X = size(A) returns a 1-by-2 vector with the number of rows and columns in A.
 Private Function fn_size(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
-    If Utils_Dimensions(args(1)) = 0 Then
-        fn_size = 1
-    Else
-        Dim r: ReDim r(1, 2)
-        r(1, 1) = Utils_Rows(args(1))
-        r(1, 2) = Utils_Cols(args(1))
-        fn_size = r
-    End If
+    Dim r: ReDim r(1, 2)
+    r(1, 1) = Utils_Rows(args(1))
+    r(1, 2) = Utils_Cols(args(1))
+    fn_size = r
 End Function
 
 ' X = rand(n)
@@ -1569,6 +1609,8 @@ Private Function fn_reshape(args As Variant) As Variant
     fn_reshape = r
 End Function
 
+' X = tostring(A)
+'
 Private Function fn_tostring(args As Variant) As Variant
     Utils_ForceMatrix args(1)
     Dim i As Long, j As Long
@@ -1585,7 +1627,7 @@ End Function
 ' X = if(a,B,C)
 '
 ' X = if(a,B,C) returns B if a evaluates to true; otherwise C.
-' The if() function works more as an operator implementing short circuiting.
+' if() functions as an operator implementing short circuiting.
 ' I.e. if C is an expression it is not evaluated unless a is true and vice versa.
 Private Function fn_if(args As Variant) As Variant
     If CBool(eval_tree(args(1))) Then
@@ -1606,49 +1648,124 @@ ErrorHandler:
     fn_iferror = eval_tree(args(2))
 End Function
 
-' Count the number of elements that evaluates to false
+' X = count(A)
+' X = count(A,dim)
+'
+' X = count(A) counts the number of elements in A which do not evaluate to false
 Private Function fn_count(args As Variant) As Variant
-
+    If Utils_IsNA(args(1)) Then fn_count = 0: Exit Function
+    Dim x As Long, i As Long, j As Long, r As Variant
+    Dim rows As Long, cols As Long
+    Utils_ForceMatrix args(1)
+    Utils_Size args(1), rows, cols
+    x = Utils_CalcDimDirection(args)
+    ReDim r(x * rows + (1 - x), (1 - x) * cols + x)
+    For i = 1 To rows
+        For j = 1 To cols
+            r(i * x + (1 - x), j * (1 - x) + x) _
+                = r(i * x + (1 - x), j * (1 - x) + x) - CBool(args(1)(i, j))
+        Next j
+    Next i
+    Utils_Conform r
+    fn_count = r
 End Function
 
-' Returns 1st differences for each column
+' X = diff(A)
+' X = diff(A,dim)
+' X = diff(A,dim,n)
 Private Function fn_diff(args As Variant) As Variant
-
+    If Utils_IsNA(args(1)) Then fn_diff = [NA()]: Exit Function
+    Utils_ForceMatrix args(1)
+    Dim x As Long: x = Utils_CalcDimDirection(args)
+    If UBound(args(1), 1 + x) < 2 Then fn_diff = [NA()]: Exit Function
+    Dim i As Long, j As Long, r As Variant
+    ReDim r(UBound(args(1), 1) - (1 - x), UBound(args(1), 2) - x)
+    For i = 2 - x To UBound(args(1), 1)
+        For j = 1 + x To UBound(args(1), 2)
+            r(i - (1 - x), j - x) = args(1)(i, j) - args(1)(i - (1 - x), j - x)
+        Next j
+    Next i
+    Utils_Conform r
+    fn_diff = r
+    If UBound(args) > 2 Then
+        If args(3) > 1 Then
+            fn_diff = fn_diff(Array(r, 1 + x, args(3) - 1))
+        End If
+    End If
 End Function
 
-' Filter input so only one occurrence of each element is left
-Private Function fn_unique(args As Variant) As Variant
-
-End Function
-
+' B = sort(A)
+' B = sort(A,dim)
+' B = sort(A,dim,mode)
 Private Function fn_sort(args As Variant) As Variant
-    args = CVar(args)
-    utils_qsort args, 1, UBound(args, 1)
-    fn_sort = args
+    Dim x As Long: x = Utils_CalcDimDirection(args)
+    Dim ascend As Boolean: ascend = True
+    If UBound(args) > 2 Then
+        Assert args(3) = "ascend" Or args(3) = "descend", _
+            "sort(): Parameter mode must be either ""ascend"" or ""descend""."
+        ascend = args(3) = "ascend"
+    End If
+    Dim i As Long
+    For i = 1 To UBound(args(1), 2 - x)
+        If x = 0 Then
+            Utils_QuickSortCol args(1), 1, UBound(args(1), 1), i, ascend
+        Else
+            Utils_QuickSortRow args(1), 1, UBound(args(1), 2), i, ascend
+        End If
+    Next i
+    fn_sort = args(1)
 End Function
 
-' Implementation of quick-sort
-Private Function utils_qsort(arr As Variant, first As Long, last As Long)
+' Implementation of quick-sort - is a helper for fn_sort()
+' Sorts on columns
+Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
     Dim tmp As Variant
-    Dim pivot As Variant: pivot = arr(first, 1)
+    Dim compFactor As Long: compFactor = -1 - CLng(ascend) * 2
+    Dim pivot As Variant: pivot = arr(first, col)
     Dim left As Long: left = first
     Dim right As Long: right = last
     While left <= right
-        While arr(left, 1) < pivot
+        While compFactor * (arr(left, col) - pivot) < 0
             left = left + 1
         Wend
-        While arr(right, 1) > pivot
+        While compFactor * (arr(right, col) - pivot) > 0
             right = right - 1
         Wend
         If left <= right Then
-            tmp = arr(left, 1)
-            arr(left, 1) = arr(right, 1)
-            arr(right, 1) = tmp
+            tmp = arr(left, col)
+            arr(left, col) = arr(right, col)
+            arr(right, col) = tmp
             left = left + 1
             right = right - 1
         End If
     Wend
-    If first < right Then utils_qsort arr, first, right
-    If left < last Then utils_qsort arr, left, last
+    If first < right Then Utils_QuickSortCol arr, first, right, col, ascend
+    If left < last Then Utils_QuickSortCol arr, left, last, col, ascend
 End Function
 
+' Implementation of quick-sort - is a helper for fn_sort()
+' Sorts on rows
+Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long, row As Long, ascend As Boolean)
+    Dim tmp As Variant
+    Dim compFactor As Long: compFactor = -1 - CLng(ascend) * 2
+    Dim pivot As Variant: pivot = arr(row, first)
+    Dim left As Long: left = first
+    Dim right As Long: right = last
+    While left <= right
+        While compFactor * (arr(row, left) - pivot) < 0
+            left = left + 1
+        Wend
+        While compFactor * (arr(row, right) - pivot) > 0
+            right = right - 1
+        Wend
+        If left <= right Then
+            tmp = arr(row, left)
+            arr(row, left) = arr(row, right)
+            arr(row, right) = tmp
+            left = left + 1
+            right = right - 1
+        End If
+    Wend
+    If first < right Then Utils_QuickSortRow arr, first, right, row, ascend
+    If left < last Then Utils_QuickSortRow arr, left, last, row, ascend
+End Function

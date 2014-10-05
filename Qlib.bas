@@ -3,7 +3,7 @@
 ' Version 1.0
 '
 ' Q features a single public function, Q(), containing an expression parser.
-' The parser is able to parse and evaluate a subset of the MATLAB programming language.
+' Q() is able to parse and evaluate a subset of the MATLAB programming language.
 ' It features almost all MATLAB operators, selected standard functions
 ' and has complete support for submatrices, '()', and concatenation, '[]'.
 '
@@ -34,7 +34,7 @@ Private Const REGEXPATTERN = _
     "|[a-zA-Z][a-zA-Z0-9_]*|[0-9]+\.?[0-9]*" & _
     "|\|\||&&|\||&|<>|~=|<=|>=|<|>|==|=" & _
     "|\:|\+|\-|\*|\.\*|\/|\.\/|\^|\.\^|\'|~|#|!"
-Private arguments() As Variant
+Private arguments As Variant
 Private tokens As Object
 Private tokenIndex As Long
 Private endValues As Variant
@@ -65,13 +65,14 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
         Assert i = Len(expr), "Illegal token: " & Mid(expr, i + 1, 1)
     End With
 
+
     Dim root As Variant
     root = Parse_Binary()
-    
+
     'Utils_DumpTree root    'Uncomment for debugging
 
     Q = eval_tree(root)
-    
+
     Assert Tokens_Current() = "", "'" & Tokens_Current & "' not expected here."
     Exit Function
     
@@ -88,7 +89,7 @@ End Function
 '     A variable cannot be a 1x1 array; then it must be a scalar.
 '     Use Utils_Conform() to correctly shape all variables.
 '   - Variable names: [a-z]
-'   - Function names: [a-z][a-z0-9_]*
+'   - Function names: [a-zA-Z][a-zA-Z0-9_]*
 '   - The empty matrix/scalar [] has per definition 0 rows, 0 cols,
 '     dimension 0 and is internally represented by value #NA / NA()
 '*******************************************************************
@@ -461,11 +462,37 @@ Private Function eval_tree(root As Variant) As Variant
     If left(root(1), 3) = "fn_" And root(1) <> "fn_if" And root(1) <> "fn_iferror" Then
         Utils_CalcArgs root(2)
     End If
-    eval_tree = Application.Run(root(1), root(2))
+    Select Case root(1)
+        ' This is ugly, but much faster than just naively calling Application.Run()
+        ' Just hardcode the most used functions
+        Case "eval_constant": eval_tree = eval_constant(root(2))
+        Case "eval_arg": eval_tree = eval_arg(root(2))
+        Case "eval_index": eval_tree = eval_index(root(2))
+        Case "eval_end": eval_tree = eval_end(root(2))
+        Case "eval_colon": eval_tree = eval_colon(root(2))
+        Case "eval_concat": eval_tree = eval_concat(root(2))
+        Case "op_eq": eval_tree = op_eq(root(2))
+        Case "op_plus": eval_tree = op_plus(root(2))
+        Case "op_minus": eval_tree = op_minus(root(2))
+        Case "op_mtimes": eval_tree = op_mtimes(root(2))
+        Case "op_colon": eval_tree = op_colon(root(2))
+        Case "fn_sum": eval_tree = fn_sum(root(2))
+        Case "fn_repmat": eval_tree = fn_repmat(root(2))
+        Case Else
+            eval_tree = Application.Run(root(1), root(2))
+    End Select
 End Function
 
 Private Function eval_constant(args As Variant) As Variant
     eval_constant = args(1)
+End Function
+
+Private Function eval_arg(args As Variant) As Variant
+    If args(1) > UBound(arguments) Then
+        Assert False, "Argument '" & Chr(Asc("a") + args(1)) & "' not found."
+    End If
+    eval_arg = CVar(arguments(args(1)))
+    Utils_Conform eval_arg
 End Function
 
 Private Function eval_end(args As Variant) As Variant
@@ -477,15 +504,7 @@ Private Function eval_end(args As Variant) As Variant
 End Function
 
 Private Function eval_colon(args As Variant) As Variant
-    err.Raise "colon not allowed here..."
-End Function
-
-Private Function eval_arg(args As Variant) As Variant
-    If args(1) > UBound(arguments) Then
-        Assert False, "Argument '" & Chr(Asc("a") + args(1)) & "' not found."
-    End If
-    eval_arg = CVar(arguments(args(1)))
-    Utils_Conform eval_arg
+    Assert False, "colon not allowed here..."
 End Function
 
 Private Function Utils_IsVector(r As Long, c As Long) As Boolean
@@ -638,6 +657,7 @@ End Function
 '*** OPERATORS ***
 '*****************
 
+' Matches operator !
 Private Function op_extern(args As Variant) As Variant
     args(1)(1) = Mid(args(1)(1), 4)
     Dim a As Variant: a = args(1)(2)
@@ -875,13 +895,7 @@ Private Function op_plus(args As Variant) As Variant
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
         For y = 1 To UBound(r, 2)
-            a1 = args(1)(MIN(x, r1), MIN(y, c1))
-            a2 = args(2)(MIN(x, r2), MIN(y, c2))
-            If WorksheetFunction.IsNonText(a1) And WorksheetFunction.IsNonText(a2) Then
-                r(x, y) = a1 + a2
-            Else
-                r(x, y) = a1 & a2
-            End If
+            r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) + args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
     Utils_Conform r
@@ -913,14 +927,16 @@ End Function
 
 ' Matches prefix unary operator -
 Private Function op_uminus(args As Variant) As Variant
+    Dim rows As Long, cols As Long
     Utils_CalcArgs args
-    If Utils_Dimensions(args(1)) = 0 Then
+    Utils_Size args(1), rows, cols
+    If rows <= 1 And cols <= 1 Then
         op_uminus = -args(1)
     Else
         Dim i As Long, j As Long
-        ReDim r(UBound(args(1), 1), UBound(args(1), 2))
-        For i = 1 To UBound(r, 1)
-            For j = 1 To UBound(r, 2)
+        ReDim r(rows, cols)
+        For i = 1 To rows
+            For j = 1 To cols
                 r(i, j) = -args(1)(i, j)
             Next j
         Next i
@@ -932,7 +948,7 @@ End Function
 Private Function op_mtimes(args As Variant) As Variant
     Utils_CalcArgs args
     If Utils_Dimensions(args(1)) = 2 And Utils_Dimensions(args(2)) = 2 Then
-        Assert UBound(args(1), 2) = UBound(args(2), 1), "mtimes: Matrix sizes not compatible"
+        Assert UBound(args(1), 2) = UBound(args(2), 1), "mtimes(): Matrix sizes not compatible"
         op_mtimes = WorksheetFunction.MMult(args(1), args(2))
     Else
         Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
@@ -1645,6 +1661,7 @@ Private Function fn_iferror(args As Variant) As Variant
     fn_iferror = eval_tree(args(1))
     Exit Function
 ErrorHandler:
+    errorMsg = ""
     fn_iferror = eval_tree(args(2))
 End Function
 
@@ -1705,6 +1722,7 @@ Private Function fn_sort(args As Variant) As Variant
             "sort(): Parameter mode must be either ""ascend"" or ""descend""."
         ascend = args(3) = "ascend"
     End If
+    Utils_ForceMatrix args(1)
     Dim i As Long
     For i = 1 To UBound(args(1), 2 - x)
         If x = 0 Then
@@ -1719,6 +1737,7 @@ End Function
 ' Implementation of quick-sort - is a helper for fn_sort()
 ' Sorts on columns
 Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
+    If first >= last Then Exit Function
     Dim tmp As Variant
     Dim compFactor As Long: compFactor = -1 - CLng(ascend) * 2
     Dim pivot As Variant: pivot = arr(first, col)
@@ -1739,8 +1758,8 @@ Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long,
             right = right - 1
         End If
     Wend
-    If first < right Then Utils_QuickSortCol arr, first, right, col, ascend
-    If left < last Then Utils_QuickSortCol arr, left, last, col, ascend
+    Utils_QuickSortCol arr, first, right, col, ascend
+    Utils_QuickSortCol arr, left, last, col, ascend
 End Function
 
 ' Implementation of quick-sort - is a helper for fn_sort()

@@ -13,6 +13,7 @@ and has complete support for submatrices, '( )', and concatenation, '[ ]'.
 ---------|--------
 =Q("2+2") | 4 
 =Q("a+b+c",3,4,5) | 12
+=Q("a(:,4)", A1:D5) | The 4th column in cells A1:D5
 =Q("eye(3)")  |  the 3x3 identity matrix
 =Q("mean(a)",A1:D5)      |row vector with the mean of each column in cells A1:D5
 =Q("a.*b",A1:D5,F1:I5)   | element wise multiplication of cells A1:D5 and F1:I5

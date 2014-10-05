@@ -24,6 +24,9 @@
 '   - Excel functions: if,iferror
 '   - Prefix function calls with ! to call external VBA functions not found in Q.
 '
+' For the newest version, go to:
+' http://github.com/nielsls/Q
+'
 ' 2014, Niels Lykke Sørensen
 
 Option Explicit

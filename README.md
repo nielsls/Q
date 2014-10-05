@@ -1,16 +1,14 @@
 Q 
 ====
 
-##A MATLAB-like matrix parser for Microsoft Excel
+###A MATLAB-like matrix parser for Microsoft Excel
 
 Q features a single public function, Q(), containing an expression parser.
 Q() is able to parse and evaluate a subset of the MATLAB programming language.
 It features almost all MATLAB operators, selected standard functions
 and has complete support for submatrices, '( )', and concatenation, '[ ]'.
 
-##Example usage
-
-
+###Example usage
  Formula | Result 
 ---------|--------
 =Q("2+2") | 4 

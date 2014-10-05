@@ -1765,6 +1765,7 @@ End Function
 ' Implementation of quick-sort - is a helper for fn_sort()
 ' Sorts on rows
 Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long, row As Long, ascend As Boolean)
+    If first >= last Then Exit Function
     Dim tmp As Variant
     Dim compFactor As Long: compFactor = -1 - CLng(ascend) * 2
     Dim pivot As Variant: pivot = arr(row, first)
@@ -1785,6 +1786,6 @@ Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long,
             right = right - 1
         End If
     Wend
-    If first < right Then Utils_QuickSortRow arr, first, right, row, ascend
-    If left < last Then Utils_QuickSortRow arr, left, last, row, ascend
+    Utils_QuickSortRow arr, first, right, row, ascend
+    Utils_QuickSortRow arr, left, last, row, ascend
 End Function

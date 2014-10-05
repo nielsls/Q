@@ -65,7 +65,6 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
         Assert i = Len(expr), "Illegal token: " & Mid(expr, i + 1, 1)
     End With
 
-
     Dim root As Variant
     root = Parse_Binary()
 

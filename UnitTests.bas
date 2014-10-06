@@ -23,7 +23,7 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("numel(a)", a), 15)
     Debug.Assert Q("isequal(a,b)", Q("numel(42)"), 1)
     Debug.Assert Q("isequal(a,b)", Q("size(a)", a), [{ 3, 5 }])
-    Debug.Assert Q("isequal(a,b)", Q("size(42)"), 1)
+    Debug.Assert Q("isequal(a,b)", Q("size(42)"), [{ 1, 1 }])
     Debug.Assert Q("isequal(a,b)", Q("a(1)", a), 1)                                           ' Indexing
     Debug.Assert Q("isequal(a,b)", Q("a(1,1)", a), 1)
     Debug.Assert Q("isequal(a,b)", Q("a(2,end)", a), 14)
@@ -83,5 +83,5 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("islogical(17)"), False)
     Debug.Assert Q("isequal(a,b)", Q("islogical(a>10)", a), True)
     Debug.Assert Q("isequal(a,b)", Q("islogical(a)", a), False)
- 
+
 End Sub

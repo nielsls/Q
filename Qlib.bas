@@ -1106,15 +1106,15 @@ Private Function fn_find(args As Variant) As Variant
         Dim isRowVec As Long: isRowVec = -(rows = 1)
         Dim r: ReDim r(isRowVec + (1 - isRowVec) * counter, 1 - isRowVec + isRowVec * counter)
         counter = 0
-        For i = 1 To rows
-            For j = 1 To rows
+        For j = 1 To cols
+            For i = 1 To rows
                 If CDbl(args(1)(i, j)) <> 0 Then
                     counter = counter + 1
                     r(isRowVec + (1 - isRowVec) * counter, 1 - isRowVec + isRowVec * counter) _
                         = (j - 1) * rows + i
                 End If
-            Next j
-        Next i
+            Next i
+        Next j
         Utils_Conform r
         fn_find = r
     End If

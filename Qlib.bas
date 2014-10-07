@@ -683,20 +683,28 @@ End Function
 
 ' Matches operator ||
 Private Function op_orshortcircuit(args As Variant) As Variant
+    On Error GoTo ErrorHandler
     If CBool(eval_tree(args(1))) Then
         op_orshortcircuit = True
     Else
         op_orshortcircuit = CBool(eval_tree(args(2)))
     End If
+    Exit Function
+ErrorHandler:
+    Assert False, "Operator ||: Could not convert argument to boolean value"
 End Function
 
 ' Matches operator &&
 Private Function op_andshortcircuit(args As Variant) As Variant
+    On Error GoTo ErrorHandler
     If Not CBool(eval_tree(args(1))) Then
         op_andshortcircuit = False
     Else
         op_andshortcircuit = CBool(eval_tree(args(2)))
     End If
+    Exit Function
+ErrorHandler:
+    Assert False, "Operator &&: Could not convert argument to boolean value"
 End Function
 
 ' Matches operator &
@@ -1067,21 +1075,21 @@ End Function
 '*** FUNCTIONS ***
 '*****************
 
+' b = islogical(A)
+'
+' b = islogical(A) returns true if all elements of A are boolean values.
 Private Function fn_islogical(args As Variant) As Variant
-    If Utils_Dimensions(args(1)) = 0 Then
-        fn_islogical = WorksheetFunction.IsLogical(args(1))
-    Else
-        Dim i As Long, j As Long
-        For i = 1 To UBound(args(1), 1)
-            For j = 1 To UBound(args(1), 2)
-                If Not WorksheetFunction.IsLogical(args(1)(i, j)) Then
-                    fn_islogical = False
-                    Exit Function
-                End If
-            Next j
-        Next i
-        fn_islogical = True
-    End If
+    Utils_ForceMatrix args(1)
+    Dim i As Long, j As Long
+    For i = 1 To UBound(args(1), 1)
+        For j = 1 To UBound(args(1), 2)
+            If Not WorksheetFunction.IsLogical(args(1)(i, j)) Then
+                fn_islogical = False
+                Exit Function
+            End If
+        Next j
+    Next i
+    fn_islogical = True
 End Function
 
 ' I = find(X)
@@ -1791,3 +1799,4 @@ Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long,
     Utils_QuickSortRow arr, first, right, row, ascend
     Utils_QuickSortRow arr, left, last, row, ascend
 End Function
+

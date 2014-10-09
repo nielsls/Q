@@ -1799,16 +1799,16 @@ Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long,
 End Function
 
 ' Called from Utils_QuickSortRow and Utils_QuickSortCol. Compares numerics and strings.
-Public Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend As Boolean) As Double
+Private Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend As Boolean) As Variant
     If IsNumeric(arg1) Then
         If IsNumeric(arg2) Then
             Utils_QuickSortCompare = arg1 - arg2
         Else
-            Utils_QuickSortCompare = 1
+            Utils_QuickSortCompare = -1
         End If
     Else
         If IsNumeric(arg2) Then
-            Utils_QuickSortCompare = -1
+            Utils_QuickSortCompare = 1
         Else
             Utils_QuickSortCompare = StrComp(CStr(arg1), CStr(arg2))
         End If

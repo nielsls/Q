@@ -1749,15 +1749,14 @@ End Function
 Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
     If first >= last Then Exit Function
     Dim tmp As Variant
-    Dim compFactor As Long: compFactor = -1 - CLng(ascend) * 2
     Dim pivot As Variant: pivot = arr(first, col)
     Dim left As Long: left = first
     Dim right As Long: right = last
     While left <= right
-        While compFactor * (arr(left, col) - pivot) < 0
+        While Utils_QuickSortCompare(arr(left, col), pivot, ascend) > 0
             left = left + 1
         Wend
-        While compFactor * (arr(right, col) - pivot) > 0
+        While Utils_QuickSortCompare(arr(right, col), pivot, ascend) < 0
             right = right - 1
         Wend
         If left <= right Then
@@ -1777,15 +1776,14 @@ End Function
 Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long, row As Long, ascend As Boolean)
     If first >= last Then Exit Function
     Dim tmp As Variant
-    Dim compFactor As Long: compFactor = -1 - CLng(ascend) * 2
     Dim pivot As Variant: pivot = arr(row, first)
     Dim left As Long: left = first
     Dim right As Long: right = last
     While left <= right
-        While compFactor * (arr(row, left) - pivot) < 0
+        While Utils_QuickSortCompare(arr(row, left), pivot, ascend) > 0
             left = left + 1
         Wend
-        While compFactor * (arr(row, right) - pivot) > 0
+        While Utils_QuickSortCompare(arr(row, right), pivot, ascend) < 0
             right = right - 1
         Wend
         If left <= right Then
@@ -1800,3 +1798,19 @@ Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long,
     Utils_QuickSortRow arr, left, last, row, ascend
 End Function
 
+' Called from Utils_QuickSortRow and Utils_QuickSortCol. Compares numerics and strings.
+Public Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend As Boolean) As Long
+    If IsNumeric(arg1) Then
+        If IsNumeric(arg2) Then
+            Utils_QuickSortCompare = (1 + 2 * CLng(ascend)) * (arg1 - arg2)
+        Else
+            Utils_QuickSortCompare = -1 - 2 * CLng(ascend)
+        End If
+    Else
+        If IsNumeric(arg2) Then
+            Utils_QuickSortCompare = 1 + 2 * CLng(ascend)
+        Else
+            Utils_QuickSortCompare = (1 + 2 * CLng(ascend)) * StrComp(CStr(arg1), CStr(arg2))
+        End If
+    End If
+End Function

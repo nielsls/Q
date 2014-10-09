@@ -1,6 +1,6 @@
 '*******************************************************************
 ' Q - A MATLAB-like matrix parser for Microsoft Excel
-' Version 1.0
+' Version 1.01
 '
 ' Q features a single public function, Q(), containing an expression parser.
 ' Q() is able to parse and evaluate a subset of the MATLAB programming language.

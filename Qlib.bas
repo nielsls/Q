@@ -1,6 +1,5 @@
 '*******************************************************************
 ' Q - A MATLAB-like matrix parser for Microsoft Excel
-' Version 1.01
 '
 ' Q features a single public function, Q(), containing an expression parser.
 ' Q() is able to parse and evaluate a subset of the MATLAB programming language.
@@ -32,50 +31,39 @@
 Option Explicit
 Option Base 1
 
-Private Const REGEXPATTERN = _
-    " |\""[^\""]*\""|\(|\)|\[|\]|\,|\;" & _
-    "|[a-zA-Z][a-zA-Z0-9_]*|[0-9]+\.?[0-9]*" & _
-    "|\|\||&&|\||&|<>|~=|<=|>=|<|>|==|=" & _
-    "|\:|\+|\-|\*|\.\*|\/|\.\/|\^|\.\^|\'|~|#|!"
+Private Const VERSION = "1.1"
+    
+Private Const NUMERICS = "0123456789"
+Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
+Private Const SINGLE_OPS = "()[],;:+-#'"
+Private Const COMBO_OPS = ".|&<>~=*/^!"
+
+Private expression As String
 Private arguments As Variant
-Private tokens As Object
-Private tokenIndex As Long
-Private endValues As Variant
+Private expressionIndex As Long
+Private currentToken As String
+Private previousTokenIsSpace As Boolean
+Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
 Private errorMsg As String
 
 ' Entry point - the only public function in the library
 Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
-    On Error GoTo ErrorHandler
-
+    expression = expr
     arguments = args
-    tokenIndex = 0
     endValues = Empty
     errorMsg = ""
 
-    With CreateObject("VBScript.RegExp")
-        'Split input string into valid tokens
-        .Global = True
-        .IgnoreCase = False
-        .pattern = REGEXPATTERN
-        Set tokens = .Execute(expr)
-        
-        'Check valid tokens constitute the full input string
-        Dim i As Long, token As Variant
-        For Each token In tokens
-            Assert i = token.FirstIndex, "Illegal token: " & Mid(expr, i + 1, 1)
-            i = i + token.Length
-        Next token
-        Assert i = Len(expr), "Illegal token: " & Mid(expr, i + 1, 1)
-    End With
-
+    On Error GoTo ErrorHandler
+    
+    expressionIndex = 1
+    Tokens_Advance ' Find first token in input string
+    
     Dim root As Variant
     root = Parse_Binary()
-
     'Utils_DumpTree root    'Uncomment for debugging
-
     Q = eval_tree(root)
 
-    Assert Tokens_Current() = "", "'" & Tokens_Current & "' not expected here."
+    Utils_Assert expressionIndex > Len(expression), "'" & currentToken & "' not expected here."
     Exit Function
     
 ErrorHandler:
@@ -84,6 +72,74 @@ ErrorHandler:
     If errorMsg = "" Then errorMsg = err.Description
     Q = "ERROR - " & errorMsg
 End Function
+
+
+'*********************
+'*** TOKEN CONTROL ***
+'*********************
+
+Private Function AdvanceWhileLegal(legalchars As String)
+    While expressionIndex <= Len(expression) And InStr(legalchars, Mid(expression, expressionIndex, 1)) > 0
+        expressionIndex = expressionIndex + 1
+    Wend
+End Function
+
+Private Function AdvanceWhileDifferent(differentchar As String)
+    While expressionIndex <= Len(expression) And Mid(expression, expressionIndex, 1) <> differentchar
+        expressionIndex = expressionIndex + 1
+    Wend
+End Function
+
+Private Function Tokens_Advance() As Boolean
+    Dim start As Long
+    start = expressionIndex
+    AdvanceWhileLegal " "
+    previousTokenIsSpace = start <> expressionIndex
+    start = expressionIndex
+    
+    If expressionIndex > Len(expression) Then
+        currentToken = ""
+        Exit Function
+    End If
+    Select Case Asc(Mid(expression, expressionIndex, 1))
+    
+        Case Asc("""")
+            expressionIndex = expressionIndex + 1
+            AdvanceWhileDifferent """"
+            Utils_Assert expressionIndex <= Len(expression), "Unfinished string literal"
+            expressionIndex = expressionIndex + 1
+            
+        Case Asc("a") To Asc("z"), Asc("A") To Asc("Z")
+            AdvanceWhileLegal NUMERICS & ALPHAS & "_"
+            
+        Case Asc("0") To Asc("9")
+            AdvanceWhileLegal NUMERICS
+            If Mid(expression, expressionIndex, 1) = "." Then
+                expressionIndex = expressionIndex + 1
+                AdvanceWhileLegal NUMERICS
+            End If
+            
+        Case Asc("("), Asc(")"), Asc("["), Asc("]")
+            expressionIndex = expressionIndex + 1
+                
+        Case Else
+            If InStr(SINGLE_OPS, Mid(expression, expressionIndex, 1)) Then
+                expressionIndex = expressionIndex + 1
+            Else
+                AdvanceWhileLegal COMBO_OPS
+            End If
+            
+    End Select
+    currentToken = Mid(expression, start, expressionIndex - start)
+    Tokens_Advance = expressionIndex <> start
+    Utils_Assert Not (expressionIndex = start And expressionIndex <= Len(expression)), "Illegal char: " & Mid(expression, expressionIndex, 1)
+End Function
+
+Private Sub Tokens_AssertAndAdvance(token As String)
+    Utils_Assert token = currentToken, "Missing token: " & token
+    Tokens_Advance
+End Sub
+
 
 '*******************************************************************
 ' Evaluator invariants:
@@ -101,13 +157,13 @@ End Function
 '***************************
 
 'Returns true if token is a suitable operator
-'op = Array( <function name>, <precedence level>, <left associative> )
 Private Function Parse_FindOp(token As String, opType As String, ByRef op As Variant) As Boolean
     op = Null
     
     Select Case opType
         Case "binary"
             Select Case token
+                'op = Array( <function name>, <precedence level>, <left associative> )
                 Case "||": op = Array("orshortcircuit", 1, True)
                 Case "&&": op = Array("andshortcircuit", 2, True)
                 Case "|": op = Array("or", 3, True)
@@ -152,27 +208,43 @@ End Function
 '******************
 '*** BUILD TREE ***
 '******************
+
+' Each leaf in the parsed tree is an array with two entries
+' First entry is the name of the function that should be executed.
+' Second entry is a 1-dim array with its arguments
+
+' Parse chain:
+'
+' Binary
+'   Prefix
+'     Postfix
+'       List
+'       Atomic
+'         Binary
+'         Matrix
+'           List
+
 Private Function Parse_Matrix() As Variant
-    Do While Tokens_Current() <> "]"
+    Do While currentToken <> "]"
         Utils_Stack_Push Parse_List(True), Parse_Matrix
-        If Tokens_Current() = ";" Then Tokens_Advance
+        If currentToken = ";" Then Tokens_Advance
     Loop
 End Function
 
 Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Variant
     Do
         Utils_Stack_Push Parse_Binary(), Parse_List
-        Select Case Tokens_Current()
+        Select Case currentToken
             Case ";", ")", "]": Exit Do
             Case ",": Tokens_Advance
-            Case Else: If Tokens_Previous() <> " " Or Not isSpaceSeparator Then Exit Do
+            Case Else: If Not previousTokenIsSpace Or Not isSpaceSeparator Then Exit Do
         End Select
     Loop While True
 End Function
 
 Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
     Parse_Binary = Parse_Prefix()
-    Dim op: Do While Parse_FindOp(Tokens_Current(), "binary", op)
+    Dim op: Do While Parse_FindOp(currentToken, "binary", op)
         If op(2) + CLng(op(3)) < lastPrec Then Exit Do
         Tokens_Advance
         Parse_Binary = Array("op_" & op(1), Array(Parse_Binary, Parse_Binary(CLng(op(2)))))
@@ -181,7 +253,7 @@ End Function
 
 Private Function Parse_Prefix() As Variant
     Dim op
-    If Not Parse_FindOp(Tokens_Current(), "unaryprefix", op) Then
+    If Not Parse_FindOp(currentToken, "unaryprefix", op) Then
         Parse_Prefix = Parse_Postfix()
     Else
         Tokens_Advance
@@ -192,10 +264,10 @@ End Function
 Private Function Parse_Postfix() As Variant
     Parse_Postfix = Parse_Atomic
     Dim op: Do
-        If Parse_FindOp(Tokens_Current(), "unarypostfix", op) Then
+        If Parse_FindOp(currentToken, "unarypostfix", op) Then
             Parse_Postfix = Array("op_" & op, Array(Parse_Postfix))
             Tokens_Advance
-        ElseIf Tokens_Current() = "(" Then
+        ElseIf currentToken = "(" Then
             Tokens_Advance
             Parse_Postfix = Array("eval_index", Array(Parse_Postfix, Parse_List()))
             Tokens_AssertAndAdvance ")"
@@ -206,10 +278,9 @@ Private Function Parse_Postfix() As Variant
 End Function
 
 Private Function Parse_Atomic() As Variant
-    Dim token: token = Tokens_Current()
-    Select Case token
+    Select Case currentToken
         Case ""
-            Assert False, "Missing argument"
+            Utils_Assert False, "Missing argument"
             
         Case "true"
             Parse_Atomic = Array("eval_constant", Array(True))
@@ -238,66 +309,44 @@ Private Function Parse_Atomic() As Variant
             Tokens_AssertAndAdvance "]"
         
         Case Else
-            Select Case Asc(token) 'filter on first char of token
-                Case Asc("""")
-                    Parse_Atomic = Array("eval_constant", Array(Mid(token, 2, Len(token) - 2)))
+            Select Case Asc(currentToken) 'filter on first char of token
+                Case Asc("""") ' Found a constant string
+                    Parse_Atomic = Array("eval_constant", Array(Mid(currentToken, 2, Len(currentToken) - 2)))
                     Tokens_Advance
                     
-                Case Asc("0") To Asc("9")
-                    Parse_Atomic = Array("eval_constant", Array(Val(token)))
+                Case Asc("0") To Asc("9") ' Found a numeric constant
+                    Parse_Atomic = Array("eval_constant", Array(Val(currentToken)))
                     Tokens_Advance
                     
                 Case Asc("a") To Asc("z"), Asc("A") To Asc("Z")
-                    If Len(token) = 1 Then
-                        Parse_Atomic = Array("eval_arg", Array(Asc(token) - Asc("a")))
+                    If Len(currentToken) = 1 Then ' Found an input variable
+                        Parse_Atomic = Array("eval_arg", Array(Asc(currentToken) - Asc("a")))
                         Tokens_Advance
-                    Else
+                    Else                   ' Found a function call
+                        Parse_Atomic = "fn_" & currentToken
                         Tokens_Advance
                         Tokens_AssertAndAdvance "("
-                        Parse_Atomic = Array("fn_" & token, Parse_List())
+                        Parse_Atomic = Array(Parse_Atomic, Parse_List())
                         Tokens_AssertAndAdvance ")"
                     End If
                     
                 Case Else
-                    Assert False, "Unexpected token: " & token
+                    Utils_Assert False, "Unexpected token: " & currentToken
             End Select
     End Select
 End Function
 
-'*********************
-'*** TOKEN CONTROL ***
-'*********************
-Private Function Tokens_Advance() As Boolean
-    Do
-        tokenIndex = tokenIndex + 1
-    Loop While Tokens_Current() = " "
-    Tokens_Advance = tokenIndex < tokens.count
-End Function
-
-Private Function Tokens_Current() As Variant
-    If tokenIndex < tokens.count Then
-        Tokens_Current = tokens(tokenIndex)
-    Else
-        Tokens_Current = ""
-    End If
-End Function
-
-Private Function Tokens_Previous() As Variant
-    If tokenIndex - 1 >= 0 And tokenIndex - 1 < tokens.count Then
-        Tokens_Previous = tokens(tokenIndex - 1)
-    Else
-        Tokens_Previous = ""
-    End If
-End Function
-
-Private Sub Tokens_AssertAndAdvance(token As String)
-    Assert token = Tokens_Current(), "Missing token: " & token
-    Tokens_Advance
-End Sub
-
 '*************
 '*** UTILS ***
 '*************
+Private Function MAX(a As Variant, b As Variant) As Variant
+    If a > b Then MAX = a Else MAX = b
+End Function
+
+Private Function MIN(a As Variant, b As Variant) As Variant
+    If a < b Then MIN = a Else MIN = b
+End Function
+
 Private Sub Utils_DumpTree(tree As Variant, Optional spacer As String = "")
     If Utils_Dimensions(tree) > 0 Then
         Dim leaf: For Each leaf In tree
@@ -323,7 +372,7 @@ Private Function Utils_Numel(v As Variant) As Long
         Case 0: If WorksheetFunction.IsNA(v) Then Utils_Numel = 0 Else Utils_Numel = 1
         Case 1: Utils_Numel = UBound(v)
         Case 2: Utils_Numel = UBound(v, 1) * UBound(v, 2)
-        Case Else: Assert False, "Dimension > 2"
+        Case Else: Utils_Assert False, "Dimension > 2"
     End Select
 End Function
 
@@ -349,7 +398,7 @@ Private Sub Utils_Conform(ByRef v As Variant)
             If UBound(v, 1) = 1 And UBound(v, 2) = 1 Then v = v(1, 1)
             
         Case Is > 2:
-            Assert False, "Dimension > 2"
+            Utils_Assert False, "Dimension > 2"
     End Select
 End Sub
 
@@ -383,7 +432,7 @@ Private Sub Utils_Size(v As Variant, ByRef r As Long, ByRef c As Long)
         Case 0: If Not WorksheetFunction.IsNA(v) Then r = 1: c = 1
         Case 1: r = UBound(v): c = 1
         Case 2: r = UBound(v, 1): c = UBound(v, 2)
-        Case Else: Assert False, "Dimension > 2"
+        Case Else: Utils_Assert False, "Dimension > 2"
     End Select
 End Sub
 
@@ -417,14 +466,6 @@ Private Function Utils_Stack_Size(stack As Variant) As Long
     Utils_Stack_Size = UBound(stack)
 End Function
 
-Private Function MAX(a As Variant, b As Variant) As Variant
-    If a > b Then MAX = a Else MAX = b
-End Function
-
-Private Function MIN(a As Variant, b As Variant) As Variant
-    If a < b Then MIN = a Else MIN = b
-End Function
-
 Private Sub Utils_CalcArgs(args As Variant)
     Dim i As Long
     For i = 1 To UBound(args)
@@ -444,15 +485,15 @@ Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Lo
 End Function
 
 Private Sub Utils_AssertArgsCount(args As Variant, lb As Long, ub As Long)
-    Assert _
+    Utils_Assert _
         LBound(args) >= lb And UBound(args) <= ub, _
         "Number of arguments must be between " & lb & " and " & ub
 End Sub
 
-Private Sub Assert(expr As Boolean, Optional msg As String = "Unknown error")
+Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "Unknown error")
     If expr Then Exit Sub
     errorMsg = msg
-    err.Raise vbObjectError + 1
+    err.Raise vbObjectError + 999
 End Sub
 
 '**********************
@@ -491,22 +532,19 @@ End Function
 
 Private Function eval_arg(args As Variant) As Variant
     If args(1) > UBound(arguments) Then
-        Assert False, "Argument '" & Chr(Asc("a") + args(1)) & "' not found."
+        Utils_Assert False, "Argument '" & Chr(Asc("a") + args(1)) & "' not found."
     End If
     eval_arg = CVar(arguments(args(1)))
     Utils_Conform eval_arg
 End Function
 
 Private Function eval_end(args As Variant) As Variant
-    If Utils_Stack_Size(endValues) > 0 Then
-        eval_end = Utils_Stack_Peek(endValues)
-    Else
-        err.Raise vbObjectError + 1
-    End If
+    Utils_Assert Utils_Stack_Size(endValues) > 0, """end"" not allowed here."
+    eval_end = Utils_Stack_Peek(endValues)
 End Function
 
 Private Function eval_colon(args As Variant) As Variant
-    Assert False, "colon not allowed here..."
+    Utils_Assert False, "colon not allowed here..."
 End Function
 
 Private Function Utils_IsVector(r As Long, c As Long) As Boolean
@@ -517,7 +555,8 @@ Private Function eval_indexarg(root As Variant, endValue As Long) As Variant
     Dim r As Variant
     If root(1) = "eval_colon" Then
         ReDim r(endValue, 1)
-        Dim idx As Long: For idx = 1 To endValue
+        Dim idx As Long
+        For idx = 1 To endValue
             r(idx, 1) = idx
         Next idx
     Else
@@ -598,7 +637,7 @@ Private Function eval_index(args As Variant) As Variant
     Exit Function
     
 ErrorHandler:
-    Assert False, err.Description
+    Utils_Assert False, err.Description
 End Function
 
 ' Evaluates matrix concatenation []
@@ -616,14 +655,14 @@ Private Function eval_concat(args As Variant) As Variant
             If j = 1 Then
                 requiredRows = rows
             Else
-                Assert requiredRows = rows, "Concatenation: Different row counts"
+                Utils_Assert requiredRows = rows, "Concatenation: Different row counts"
             End If
             totalCols = totalCols + cols
         Next j
         If i = 1 Then
             requiredCols = totalCols
         Else
-            Assert requiredCols = totalCols, "Concatenation: Different column counts"
+            Utils_Assert requiredCols = totalCols, "Concatenation: Different column counts"
         End If
         totalRows = totalRows + rows
     Next i
@@ -676,7 +715,7 @@ Private Function op_extern(args As Variant) As Variant
         Case 8: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8))
         Case 9: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9))
         Case 10: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9), a(10))
-        Case Else: Assert False, "Cannot evaluate " & args(1)(1) & ": Too many arguments"
+        Case Else: Utils_Assert False, "Cannot evaluate " & args(1)(1) & ": Too many arguments"
     End Select
     Utils_Conform op_extern
 End Function
@@ -691,7 +730,7 @@ Private Function op_orshortcircuit(args As Variant) As Variant
     End If
     Exit Function
 ErrorHandler:
-    Assert False, "Operator ||: Could not convert argument to boolean value"
+    Utils_Assert False, "Operator ||: Could not convert argument to boolean value"
 End Function
 
 ' Matches operator &&
@@ -704,7 +743,7 @@ Private Function op_andshortcircuit(args As Variant) As Variant
     End If
     Exit Function
 ErrorHandler:
-    Assert False, "Operator &&: Could not convert argument to boolean value"
+    Utils_Assert False, "Operator &&: Could not convert argument to boolean value"
 End Function
 
 ' Matches operator &
@@ -713,7 +752,7 @@ Private Function op_and(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -731,7 +770,7 @@ Private Function op_or(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -749,7 +788,7 @@ Private Function op_lt(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -767,7 +806,7 @@ Private Function op_lte(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -785,7 +824,7 @@ Private Function op_gt(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -803,7 +842,7 @@ Private Function op_gte(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -821,7 +860,7 @@ Private Function op_eq(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -839,7 +878,7 @@ Private Function op_ne(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -899,7 +938,7 @@ Private Function op_plus(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim a1 As Variant, a2 As Variant
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
@@ -923,7 +962,7 @@ Private Function op_minus(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -958,7 +997,7 @@ End Function
 Private Function op_mtimes(args As Variant) As Variant
     Utils_CalcArgs args
     If Utils_Dimensions(args(1)) = 2 And Utils_Dimensions(args(2)) = 2 Then
-        Assert UBound(args(1), 2) = UBound(args(2), 1), "mtimes(): Matrix sizes not compatible"
+        Utils_Assert UBound(args(1), 2) = UBound(args(2), 1), "mtimes(): Matrix sizes not compatible"
         op_mtimes = WorksheetFunction.MMult(args(1), args(2))
     Else
         Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
@@ -982,7 +1021,7 @@ Private Function op_times(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -1000,7 +1039,7 @@ Private Function op_mdivide(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -1018,7 +1057,7 @@ Private Function op_divide(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -1038,7 +1077,7 @@ Private Function op_mpower(args As Variant) As Variant
     If r1 = 1 And c1 = 1 And r2 = 1 And c2 = 1 Then
         op_mpower = args(1) ^ args(2)
     Else
-        Assert False, "mpower: Input must be scalars"
+        Utils_Assert False, "mpower: Input must be scalars"
     End If
 End Function
 
@@ -1048,7 +1087,7 @@ Private Function op_power(args As Variant) As Variant
     Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
     Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
     Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
-    Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
+    Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2)
     Dim r: ReDim r(MAX(r1, r2), MAX(c1, c2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
@@ -1168,7 +1207,7 @@ Private Function fn_inv(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_inv = 1# / args(1)
     Else
-        Assert UBound(args(1), 1) = UBound(args(1), 2), "inv: matrix not quadratic."
+        Utils_Assert UBound(args(1), 1) = UBound(args(1), 2), "inv: matrix not quadratic."
         fn_inv = WorksheetFunction.MInverse(args(1))
     End If
 End Function
@@ -1384,6 +1423,44 @@ Private Function fn_std(args As Variant) As Variant
     fn_std = r
 End Function
 
+' X = corr(A)
+'
+' X = corr(A) returns a correlation matrix for the columns of A.
+Private Function fn_corr(args As Variant) As Variant
+    Dim c As Long: c = UBound(args(1), 2)
+    Dim r As Variant: ReDim r(c, c)
+    Dim i As Long, j As Long
+    For i = 1 To c
+        r(i, i) = 1
+        For j = i + 1 To c
+            r(i, j) = WorksheetFunction.Correl( _
+                WorksheetFunction.index(args(1), 0, i), _
+                WorksheetFunction.index(args(1), 0, j))
+            r(j, i) = r(i, j)
+        Next j
+    Next i
+    fn_corr = r
+End Function
+
+' X = cov(A)
+'
+' X = cov(A) returns a covariance matrix for the columns of A.
+Private Function fn_cov(args As Variant) As Variant
+    Dim c As Long: c = UBound(args(1), 2)
+    Dim r As Variant: ReDim r(c, c)
+    Dim i As Long, j As Long
+    For i = 1 To c
+        r(i, i) = 1
+        For j = i + 1 To c
+            r(i, j) = WorksheetFunction.Covar( _
+                WorksheetFunction.index(args(1), 0, i), _
+                WorksheetFunction.index(args(1), 0, j))
+            r(j, i) = r(i, j)
+        Next j
+    Next i
+    fn_cov = r
+End Function
+
 ' X = sum(A)
 ' X = sum(A,dim)
 '
@@ -1399,7 +1476,7 @@ Private Function fn_sum(args As Variant) As Variant
     ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
     For i = 1 To UBound(r, -x + 2)
         r(x * i + (1 - x), (1 - x) * i + x) _
-            = WorksheetFunction.sum(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
+            = WorksheetFunction.Sum(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
     Utils_Conform r
     fn_sum = r
@@ -1586,13 +1663,13 @@ Private Function fn_repmat(args As Variant) As Variant
                     m = args(2)(1, 1)
                     n = args(2)(MAX(2, UBound(args(2), 1)), MAX(2, UBound(args(2), 2)))
                 Case Else
-                    Assert False, "repmat: Wrong argument"
+                    Utils_Assert False, "repmat: Wrong argument"
             End Select
         Case 3
             m = args(2)
             n = args(3)
         Case Else
-            Assert False, "repmat: Wrong number of input arguments."
+            Utils_Assert False, "repmat: Wrong number of input arguments."
     End Select
     Utils_ForceMatrix args(1)
     Utils_Size args(1), matrows, matcols
@@ -1724,27 +1801,36 @@ End Function
 ' B = sort(A)
 ' B = sort(A,dim)
 ' B = sort(A,dim,mode)
+'
+' mode must be either "ascend" or "descend"
 Private Function fn_sort(args As Variant) As Variant
     Dim x As Long: x = Utils_CalcDimDirection(args)
     Dim ascend As Boolean: ascend = True
     If UBound(args) > 2 Then
-        Assert args(3) = "ascend" Or args(3) = "descend", _
+        Utils_Assert args(3) = "ascend" Or args(3) = "descend", _
             "sort(): Parameter mode must be either ""ascend"" or ""descend""."
         ascend = args(3) = "ascend"
     End If
+    If x = 1 Then
+        args(1) = Application.WorksheetFunction.Transpose(args(1))
+        Utils_Conform args(1)
+    End If
     Utils_ForceMatrix args(1)
-    Dim i As Long
-    For i = 1 To UBound(args(1), 2 - x)
-        If x = 0 Then
-            Utils_QuickSortCol args(1), 1, UBound(args(1), 1), i, ascend
-        Else
-            Utils_QuickSortRow args(1), 1, UBound(args(1), 2), i, ascend
-        End If
+    Dim i As Long: For i = 1 To UBound(args(1), 2)
+        Utils_QuickSortCol args(1), 1, UBound(args(1), 1), i, ascend
     Next i
+    If x = 1 Then
+        args(1) = Application.WorksheetFunction.Transpose(args(1))
+    End If
+    Utils_Conform args(1)
     fn_sort = args(1)
 End Function
 
-' Implementation of quick-sort - is a helper for fn_sort()
+Private Function fn_sorttable(args As Variant) As Variant
+    Utils_Assert False, "Not implemented yet..."
+End Function
+
+' Implementation of the quick-sort algorithm - is a helper for fn_sort()
 ' Sorts on columns
 Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
     If first >= last Then Exit Function
@@ -1769,33 +1855,6 @@ Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long,
     Wend
     Utils_QuickSortCol arr, first, right, col, ascend
     Utils_QuickSortCol arr, left, last, col, ascend
-End Function
-
-' Implementation of quick-sort - is a helper for fn_sort()
-' Sorts on rows
-Private Function Utils_QuickSortRow(arr As Variant, first As Long, last As Long, row As Long, ascend As Boolean)
-    If first >= last Then Exit Function
-    Dim tmp As Variant
-    Dim pivot As Variant: pivot = arr(row, first)
-    Dim left As Long: left = first
-    Dim right As Long: right = last
-    While left <= right
-        While Utils_QuickSortCompare(arr(row, left), pivot, ascend) < 0
-            left = left + 1
-        Wend
-        While Utils_QuickSortCompare(arr(row, right), pivot, ascend) > 0
-            right = right - 1
-        Wend
-        If left <= right Then
-            tmp = arr(row, left)
-            arr(row, left) = arr(row, right)
-            arr(row, right) = tmp
-            left = left + 1
-            right = right - 1
-        End If
-    Wend
-    Utils_QuickSortRow arr, first, right, row, ascend
-    Utils_QuickSortRow arr, left, last, row, ascend
 End Function
 
 ' Called from Utils_QuickSortRow and Utils_QuickSortCol. Compares numerics and strings.

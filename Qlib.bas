@@ -31,7 +31,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.1"
+Private Const VERSION = "1.11"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -78,22 +78,11 @@ End Function
 '*** TOKEN CONTROL ***
 '*********************
 
-Private Function AdvanceWhileLegal(legalchars As String)
-    While expressionIndex <= Len(expression) And InStr(legalchars, Mid(expression, expressionIndex, 1)) > 0
-        expressionIndex = expressionIndex + 1
-    Wend
-End Function
-
-Private Function AdvanceWhileDifferent(differentchar As String)
-    While expressionIndex <= Len(expression) And Mid(expression, expressionIndex, 1) <> differentchar
-        expressionIndex = expressionIndex + 1
-    Wend
-End Function
-
 Private Function Tokens_Advance() As Boolean
     Dim start As Long
     start = expressionIndex
-    AdvanceWhileLegal " "
+    
+    Tokens_AdvanceWhileLegal " "
     previousTokenIsSpace = start <> expressionIndex
     start = expressionIndex
     
@@ -101,35 +90,34 @@ Private Function Tokens_Advance() As Boolean
         currentToken = ""
         Exit Function
     End If
+    
     Select Case Asc(Mid(expression, expressionIndex, 1))
     
         Case Asc("""")
             expressionIndex = expressionIndex + 1
-            AdvanceWhileDifferent """"
+            Tokens_AdvanceWhileDifferent """"
             Utils_Assert expressionIndex <= Len(expression), "Unfinished string literal"
             expressionIndex = expressionIndex + 1
             
         Case Asc("a") To Asc("z"), Asc("A") To Asc("Z")
-            AdvanceWhileLegal NUMERICS & ALPHAS & "_"
+            Tokens_AdvanceWhileLegal NUMERICS & ALPHAS & "_"
             
         Case Asc("0") To Asc("9")
-            AdvanceWhileLegal NUMERICS
+            Tokens_AdvanceWhileLegal NUMERICS
             If Mid(expression, expressionIndex, 1) = "." Then
                 expressionIndex = expressionIndex + 1
-                AdvanceWhileLegal NUMERICS
+                Tokens_AdvanceWhileLegal NUMERICS
             End If
-            
-        Case Asc("("), Asc(")"), Asc("["), Asc("]")
-            expressionIndex = expressionIndex + 1
                 
         Case Else
             If InStr(SINGLE_OPS, Mid(expression, expressionIndex, 1)) Then
                 expressionIndex = expressionIndex + 1
             Else
-                AdvanceWhileLegal COMBO_OPS
+                Tokens_AdvanceWhileLegal COMBO_OPS
             End If
-            
+         
     End Select
+    
     currentToken = Mid(expression, start, expressionIndex - start)
     Tokens_Advance = expressionIndex <> start
     Utils_Assert Not (expressionIndex = start And expressionIndex <= Len(expression)), "Illegal char: " & Mid(expression, expressionIndex, 1)
@@ -139,6 +127,18 @@ Private Sub Tokens_AssertAndAdvance(token As String)
     Utils_Assert token = currentToken, "Missing token: " & token
     Tokens_Advance
 End Sub
+
+Private Function Tokens_AdvanceWhileLegal(legalchars As String)
+    While expressionIndex <= Len(expression) And InStr(legalchars, Mid(expression, expressionIndex, 1)) > 0
+        expressionIndex = expressionIndex + 1
+    Wend
+End Function
+
+Private Function Tokens_AdvanceWhileDifferent(differentchar As String)
+    While expressionIndex <= Len(expression) And Mid(expression, expressionIndex, 1) <> differentchar
+        expressionIndex = expressionIndex + 1
+    Wend
+End Function
 
 
 '*******************************************************************
@@ -225,21 +225,21 @@ End Function
 '           List
 
 Private Function Parse_Matrix() As Variant
-    Do While currentToken <> "]"
+    While currentToken <> "]"
         Utils_Stack_Push Parse_List(True), Parse_Matrix
         If currentToken = ";" Then Tokens_Advance
-    Loop
+    Wend
 End Function
 
 Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Variant
-    Do
+    Do While InStr(";)]", currentToken) = 0
         Utils_Stack_Push Parse_Binary(), Parse_List
-        Select Case currentToken
-            Case ";", ")", "]": Exit Do
-            Case ",": Tokens_Advance
-            Case Else: If Not previousTokenIsSpace Or Not isSpaceSeparator Then Exit Do
-        End Select
-    Loop While True
+        If currentToken = "," Then
+            Tokens_Advance
+        ElseIf Not (previousTokenIsSpace And isSpaceSeparator) Then
+            Exit Do
+        End If
+    Loop
 End Function
 
 Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
@@ -291,11 +291,11 @@ Private Function Parse_Atomic() As Variant
             Tokens_Advance
             
         Case "end"
-            Parse_Atomic = Array("eval_end", Array())
+            Parse_Atomic = Array("eval_end", Empty)
             Tokens_Advance
             
         Case ":"
-            Parse_Atomic = Array("eval_colon", Array())
+            Parse_Atomic = Array("eval_colon", Empty)
             Tokens_Advance
             
         Case "("
@@ -468,7 +468,7 @@ End Function
 
 Private Sub Utils_CalcArgs(args As Variant)
     Dim i As Long
-    For i = 1 To UBound(args)
+    For i = 1 To Utils_Stack_Size(args)
         args(i) = eval_tree(args(i))
     Next i
 End Sub
@@ -1122,10 +1122,7 @@ Private Function fn_islogical(args As Variant) As Variant
     Dim i As Long, j As Long
     For i = 1 To UBound(args(1), 1)
         For j = 1 To UBound(args(1), 2)
-            If Not WorksheetFunction.IsLogical(args(1)(i, j)) Then
-                fn_islogical = False
-                Exit Function
-            End If
+            If Not WorksheetFunction.IsLogical(args(1)(i, j)) Then Exit Function
         Next j
     Next i
     fn_islogical = True
@@ -1476,7 +1473,7 @@ Private Function fn_sum(args As Variant) As Variant
     ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
     For i = 1 To UBound(r, -x + 2)
         r(x * i + (1 - x), (1 - x) * i + x) _
-            = WorksheetFunction.Sum(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
+            = WorksheetFunction.sum(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
     Utils_Conform r
     fn_sum = r
@@ -1557,12 +1554,12 @@ Private Function fn_isequal(args As Variant) As Variant
     If dim1 = 0 And dim2 = 0 Then
         fn_isequal = (args(1) = args(2))
     ElseIf dim1 = 2 And dim2 = 2 Then
-        Dim size1 As Variant: size1 = fn_size(Array(args(1)))
-        Dim size2 As Variant: size2 = fn_size(Array(args(2)))
-        If size1(1, 1) <> size2(1, 1) Or size1(1, 2) <> size2(1, 2) Then Exit Function
+        Dim r1 As Long, c1 As Long: Utils_Size args(1), r1, c1
+        Dim r2 As Long, c2 As Long: Utils_Size args(2), r2, c2
+        If r1 <> r2 Or c1 <> c2 Then Exit Function
         Dim i As Long, j As Long
-        For i = 1 To size1(1, 1)
-            For j = 1 To size1(1, 2)
+        For i = 1 To r1
+            For j = 1 To c1
                 If args(1)(i, j) <> args(2)(i, j) Then Exit Function
             Next j
         Next i
@@ -1599,7 +1596,7 @@ End Function
 ' drawn from the standard uniform distribution on the open interval (0,1).
 Private Function fn_rand(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 2
-    Dim r: ReDim r(args(1), args(UBound(args))) As Variant
+    Dim r: ReDim r(args(1), args(UBound(args)))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
         For y = 1 To UBound(r, 2)
@@ -1619,7 +1616,7 @@ End Function
 ' X = randn(m,n) returns an m-by-n matrix containing pseudorandom values
 ' drawn from the standard normal distribution with mean 0 and variance 1.
 Private Function fn_randn(args As Variant) As Variant
-    Dim r: ReDim r(args(1), args(UBound(args))) As Variant
+    Dim r: ReDim r(args(1), args(UBound(args)))
     Dim x As Long, y As Long
     Dim c As Long: c = 3
     Dim n(2) As Double, tmp As Double
@@ -1730,8 +1727,7 @@ End Function
 ' X = if(a,B,C)
 '
 ' X = if(a,B,C) returns B if a evaluates to true; otherwise C.
-' if() functions as an operator implementing short circuiting.
-' I.e. if C is an expression it is not evaluated unless a is true and vice versa.
+' Note: B is only evaluated if a is true and C is only evaluated if a is false
 Private Function fn_if(args As Variant) As Variant
     If CBool(eval_tree(args(1))) Then
         fn_if = eval_tree(args(2))
@@ -1857,7 +1853,7 @@ Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long,
     Utils_QuickSortCol arr, left, last, col, ascend
 End Function
 
-' Called from Utils_QuickSortRow and Utils_QuickSortCol. Compares numerics and strings.
+' Called from Utils_QuickSortCol. Compares numerics and strings.
 Private Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend As Boolean) As Variant
     If IsNumeric(arg1) Then
         If IsNumeric(arg2) Then
@@ -1873,4 +1869,8 @@ Private Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend
         End If
     End If
     If Not ascend Then Utils_QuickSortCompare = -Utils_QuickSortCompare
+End Function
+
+Private Function fn_version(args As Variant) As Variant
+    fn_version = VERSION
 End Function

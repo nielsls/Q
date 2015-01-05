@@ -10,8 +10,8 @@ It features almost all MATLAB operators, selected standard functions and has com
 ###Example usage
  Formula | Result 
 ---------|--------
-=Q("2+2") | 4 
-=Q("a+b+c",3,4,5) | 12
+'=Q("2+2")' | 4 
+'=Q("a+b+c",3,4,5)' | 12
 =Q("a(:,4)", A1:D5) | The 4th column in cells A1:D5
 =Q("eye(3)")  |  The 3x3 identity matrix
 =Q("mean(a)",A1:D5)      |Row vector with the mean of each column in cells A1:D5

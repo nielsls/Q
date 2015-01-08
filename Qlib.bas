@@ -485,9 +485,8 @@ Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Lo
 End Function
 
 Private Sub Utils_AssertArgsCount(args As Variant, lb As Long, ub As Long)
-    Utils_Assert _
-        LBound(args) >= lb And UBound(args) <= ub, _
-        "Number of arguments must be between " & lb & " and " & ub
+    Dim size As Long: size = Utils_Stack_Size(args)
+    Utils_Assert size >= lb And size <= ub, "Number of arguments must be between " & lb & " and " & ub & "."
 End Sub
 
 Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "Unknown error")
@@ -1586,59 +1585,126 @@ Private Function fn_size(args As Variant) As Variant
     fn_size = r
 End Function
 
-' X = rand(n)
+' X = rand()
+' X = rand()
 ' X = rand(m,n)
+' X = rand([m n])
 '
-' X = rand(n) returns an n-by-n matrix containing pseudorandom values
-' drawn from the standard uniform distribution on the open interval (0,1).
+' rand(...) returns pseudorandom values drawn from the standard
+' uniform distribution on the open interval (0,1)
 '
-' X = rand(m,n) returns an m-by-n matrix containing pseudorandom values
-' drawn from the standard uniform distribution on the open interval (0,1).
+' X = rand() returns a scalar
+' X = rand(n) returns an n-by-n matrix
+' X = rand(m,n) returns an m-by-n matrix
+' X = rand([m n]) returns an m-by-n matrix
 Private Function fn_rand(args As Variant) As Variant
-    Utils_AssertArgsCount args, 1, 2
-    Dim r: ReDim r(args(1), args(UBound(args)))
-    Dim x As Long, y As Long
-    For x = 1 To UBound(r, 1)
-        For y = 1 To UBound(r, 2)
-            r(x, y) = Rnd
-        Next y
-    Next
+    Dim m As Long, n As Long
+    Utils_AssertArgsCount args, 0, 2
+    Utils_GetSizeFromArgs args, m, n, 1
+    Dim r: ReDim r(m, n)
+    For m = 1 To UBound(r, 1)
+        For n = 1 To UBound(r, 2)
+            r(m, n) = Rnd
+        Next n
+    Next m
     Utils_Conform r
     fn_rand = r
 End Function
 
+' X = randi(imax)
+' X = randi(imax,n)
+' X = randi(imax,m,n)
+' X = randi(imax,[m n])
+' X = randi([imin imax], ...)
+'
+' randi(...) returns pseudorandom integer values drawn from the
+' discrete uniform distribution on the interval [1, imax] or
+' [imin, imax].
+Private Function fn_randi(args As Variant) As Variant
+    Dim imin As Long, imax As Long, m As Long, n As Long
+    Utils_AssertArgsCount args, 1, 3
+    Utils_GetSizeFromArgs args, m, n
+    If Utils_Numel(args(1)) = 1 Then
+        imin = 1
+        imax = args(1)
+    Else
+        imin = args(1)(1, 1)
+        imax = args(1)(MIN(2, UBound(args(1), 1)), MIN(2, UBound(args(1), 2)))
+    End If
+    Dim r: ReDim r(m, n)
+    For m = 1 To UBound(r, 1)
+        For n = 1 To UBound(r, 2)
+            r(m, n) = CLng(Rnd * (imax - imin)) + imin
+        Next n
+    Next m
+    Utils_Conform r
+    fn_randi = r
+End Function
+
+' X = randn()
 ' X = randn(n)
 ' X = randn(m,n)
+' X = randn([m n])
 '
-' X = randn(n) returns an n-by-n matrix containing pseudorandom values
-' drawn from the standard normal distribution with mean 0 and variance 1.
+' randn(...) returns pseudorandom values drawn from the standard
+' normal distribution with mean 0 and variance 1.
 '
-' X = randn(m,n) returns an m-by-n matrix containing pseudorandom values
-' drawn from the standard normal distribution with mean 0 and variance 1.
+' X = randn() returns a scalar
+' X = randn(n) returns an n-by-n matrix
+' X = randn(m,n) returns an m-by-n matrix
+' X = randn([m n]) returns an m-by-n matrix
 Private Function fn_randn(args As Variant) As Variant
-    Dim r: ReDim r(args(1), args(UBound(args)))
-    Dim x As Long, y As Long
+    Dim m As Long, n As Long
+    Utils_AssertArgsCount args, 0, 2
+    Utils_GetSizeFromArgs args, m, n, 1
+    Dim r: ReDim r(m, n)
     Dim c As Long: c = 3
-    Dim n(2) As Double, tmp As Double
-    For x = 1 To UBound(r, 1)
-        For y = 1 To UBound(r, 2)
+    Dim p(2) As Double, tmp As Double
+    For m = 1 To UBound(r, 1)
+        For n = 1 To UBound(r, 2)
             If c > 2 Then
                 Do
-                    n(1) = 2 * Rnd - 1
-                    n(2) = 2 * Rnd - 1
-                    tmp = n(1) * n(1) + n(2) * n(2)
+                    p(1) = 2 * Rnd - 1
+                    p(2) = 2 * Rnd - 1
+                    tmp = p(1) * p(1) + p(2) * p(2)
                 Loop Until tmp <= 1
                 tmp = Sqr(-2 * Log(tmp) / tmp)
-                n(1) = n(1) * tmp
-                n(2) = n(2) * tmp
+                p(1) = p(1) * tmp
+                p(2) = p(2) * tmp
                 c = 1
             End If
-            r(x, y) = n(c)
+            r(m, n) = p(c)
             c = c + 1
-        Next y
-    Next x
+        Next n
+    Next m
     Utils_Conform r
     fn_randn = r
+End Function
+
+
+' Returns the size of the return matrix in functions like rand, randi, repmat, ...
+' Size must be last in the args and can be either 1 scalar, 2 scalars or a vector with two scalars
+Private Function Utils_GetSizeFromArgs(args As Variant, ByRef m As Long, ByRef n As Long, Optional index As Long = 2)
+    Select Case UBound(args)
+        Case Is < index
+            m = 1: n = 1
+        Case Is = index
+            Select Case Utils_Numel(args(2))
+                Case 1
+                    m = args(index)
+                    n = m
+                Case 2
+                    m = args(index)(1, 1)
+                    n = args(index)(MIN(2, UBound(args(index), 1)), MIN(2, UBound(args(index), 2)))
+                Case Else
+                    Utils_Assert False, "Bad input format."
+            End Select
+        Case Is = index + 1
+            m = args(index)
+            n = args(index + 1)
+        Case Else
+            Utils_Assert False, "Bad size input."
+    End Select
 End Function
 
 ' X = repmat(A,n)
@@ -1650,24 +1716,8 @@ End Function
 ' X = repmat(A,[m n]) creates a large matrix X consisting of an m-by-n tiling of A.
 Private Function fn_repmat(args As Variant) As Variant
     Dim r As Variant, matrows As Long, matcols As Long, m As Long, n As Long, i As Long, j As Long
-    Select Case UBound(args)
-        Case 2
-            Select Case Utils_Numel(args(2))
-                Case 1
-                    m = args(2)
-                    n = args(2)
-                Case 2
-                    m = args(2)(1, 1)
-                    n = args(2)(MAX(2, UBound(args(2), 1)), MAX(2, UBound(args(2), 2)))
-                Case Else
-                    Utils_Assert False, "repmat: Wrong argument"
-            End Select
-        Case 3
-            m = args(2)
-            n = args(3)
-        Case Else
-            Utils_Assert False, "repmat: Wrong number of input arguments."
-    End Select
+    Utils_AssertArgsCount args, 2, 3
+    Utils_GetSizeFromArgs args, m, n
     Utils_ForceMatrix args(1)
     Utils_Size args(1), matrows, matcols
     ReDim r(matrows * m, matcols * n)

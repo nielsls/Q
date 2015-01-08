@@ -60,10 +60,11 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     
     Dim root As Variant
     root = Parse_Binary()
+    Utils_Assert currentToken = "", "'" & currentToken & "' not expected here."
     'Utils_DumpTree root    'Uncomment for debugging
     Q = eval_tree(root)
-
-    Utils_Assert expressionIndex > Len(expression), "'" & currentToken & "' not expected here."
+    If IsEmpty(Q) Then Q = [NA()]  'Makes sure the empty matrix is not converted to a 0
+    
     Exit Function
     
 ErrorHandler:
@@ -628,7 +629,10 @@ Private Function eval_index(args As Variant) As Variant
     Utils_Size args(1), matrows, matcols
     
     On Error GoTo ErrorHandler
-    Select Case UBound(args(2))
+    Select Case Utils_Stack_Size(args(2))
+        
+        Case 0:
+            Exit Function
         
         Case 1:
             i1 = eval_indexarg(args(2)(1), matrows * matcols)
@@ -1811,17 +1815,14 @@ End Function
 ' Note: B is only evaluated if a is true and C is only evaluated if a is false
 Private Function fn_if(args As Variant) As Variant
     Utils_AssertArgsCount args, 3, 3
-    If CBool(eval_tree(args(1))) Then
-        fn_if = eval_tree(args(2))
-    Else
-        fn_if = eval_tree(args(3))
-    End If
+    fn_if = eval_tree(args(3 + CLng(CBool(eval_tree(args(1))))))
 End Function
 
 ' X = iferror(A,B)
 '
 ' X = iferror(A,B) returns A if the evaluation of A does not result in a error; then B is returned instead.
 Private Function fn_iferror(args As Variant) As Variant
+    Utils_AssertArgsCount args, 2, 2
     On Error GoTo ErrorHandler:
     fn_iferror = eval_tree(args(1))
     Exit Function
@@ -1951,7 +1952,7 @@ End Function
 
 ' v = version()
 '
-' Returns the current version of the Q library.
+' Returns a string with the current version of the Q library.
 Private Function fn_version(args As Variant) As Variant
     fn_version = VERSION
 End Function

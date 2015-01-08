@@ -26,7 +26,7 @@
 ' For the newest version, go to:
 ' http://github.com/nielsls/Q
 '
-' 2014, Niels Lykke Sørensen
+' 2015, Niels Lykke Sørensen
 
 Option Explicit
 Option Base 1
@@ -229,6 +229,7 @@ Private Function Parse_Matrix() As Variant
     While currentToken <> "]"
         Utils_Stack_Push Parse_List(True), Parse_Matrix
         If currentToken = ";" Then Tokens_Advance
+        Utils_Assert currentToken <> "", "Missing ']'"
     Wend
 End Function
 
@@ -485,7 +486,7 @@ End Function
 ' Returns the size of the return matrix in functions like zeros, rand, repmat, ...
 ' Size must be last in the args and can be either 1 scalar, 2 scalars or a vector with two scalars
 Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m As Long, Optional index As Long = 2)
-    Select Case UBound(args)
+    Select Case Utils_Stack_Size(args)
         Case Is < index
             n = 1: m = 1
         Case Is = index
@@ -568,7 +569,7 @@ Private Function eval_tree(root As Variant) As Variant
         Case "fn_sum": eval_tree = fn_sum(root(2))
         Case "fn_repmat": eval_tree = fn_repmat(root(2))
         Case Else
-            eval_tree = Application.Run(root(1), root(2))
+            eval_tree = Run(root(1), root(2))
     End Select
 End Function
 
@@ -738,20 +739,20 @@ End Function
 ' Matches operator !
 Private Function op_extern(args As Variant) As Variant
     args(1)(1) = Mid(args(1)(1), 4)
-    Dim a As Variant: a = args(1)(2)
+    Dim a: a = args(1)(2)
     Utils_CalcArgs a
     Select Case UBound(a)
-        Case 0: op_extern = Application.Run(args(1)(1))
-        Case 1: op_extern = Application.Run(args(1)(1), a(1))
-        Case 2: op_extern = Application.Run(args(1)(1), a(1), a(2))
-        Case 3: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3))
-        Case 4: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4))
-        Case 5: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5))
-        Case 6: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6))
-        Case 7: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7))
-        Case 8: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8))
-        Case 9: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9))
-        Case 10: op_extern = Application.Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9), a(10))
+        Case 0: op_extern = Run(args(1)(1))
+        Case 1: op_extern = Run(args(1)(1), a(1))
+        Case 2: op_extern = Run(args(1)(1), a(1), a(2))
+        Case 3: op_extern = Run(args(1)(1), a(1), a(2), a(3))
+        Case 4: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4))
+        Case 5: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5))
+        Case 6: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6))
+        Case 7: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7))
+        Case 8: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8))
+        Case 9: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9))
+        Case 10: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9), a(10))
         Case Else: Utils_Assert False, "Cannot evaluate " & args(1)(1) & ": Too many arguments"
     End Select
     Utils_Conform op_extern
@@ -1069,7 +1070,7 @@ End Function
 
 ' Matches postfix unary operator '
 Private Function op_transpose(args As Variant) As Variant
-    op_transpose = Application.WorksheetFunction.Transpose(eval_tree(args(1)))
+    op_transpose = WorksheetFunction.Transpose(eval_tree(args(1)))
     Utils_Conform op_transpose
 End Function
 
@@ -1273,6 +1274,7 @@ End Function
 '
 ' ones(...) returns a matrix of ones.
 Private Function fn_ones(args As Variant) As Variant
+    fn_ones = 17
     Utils_AssertArgsCount args, 0, 2
     Dim n As Long, m As Long
     Utils_GetSizeFromArgs args, n, m, 1
@@ -1884,7 +1886,7 @@ Private Function fn_sort(args As Variant) As Variant
     Dim x As Long: x = Utils_CalcDimDirection(args)
     Dim ascend As Boolean: ascend = "ascend" = LCase(Utils_GetOptionalArg(args, 3, "ascend"))
     If x = 1 Then
-        args(1) = Application.WorksheetFunction.Transpose(args(1))
+        args(1) = WorksheetFunction.Transpose(args(1))
         Utils_Conform args(1)
     End If
     Utils_ForceMatrix args(1)
@@ -1892,7 +1894,7 @@ Private Function fn_sort(args As Variant) As Variant
         Utils_QuickSortCol args(1), 1, UBound(args(1), 1), i, ascend
     Next i
     If x = 1 Then
-        args(1) = Application.WorksheetFunction.Transpose(args(1))
+        args(1) = WorksheetFunction.Transpose(args(1))
     End If
     Utils_Conform args(1)
     fn_sort = args(1)

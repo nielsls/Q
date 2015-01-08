@@ -27,4 +27,4 @@ It features almost all MATLAB operators, selected standard functions and has com
   - Excel functions: <i>if,iferror</i>
   - Prefix function calls with ! to call external VBA functions not found in Q.
 
-2014, Niels Lykke Sørensen
+2015, Niels Lykke Sørensen

@@ -7,6 +7,8 @@ Sub TestAll()
     d = 17
     arr = Array(a, b, c, d)
 
+    Debug.Assert Q("isequal(a,b)", Q("[]"), [NA()])
+
     Debug.Assert Q("isequal(a,b)", Q("-1.2(1)"), -1.2)                                      ' Scalar operators
     Debug.Assert Q("isequal(a,b)", Q("---1+(+2)"), 1)
     Debug.Assert Q("isequal(a,b)", Q("16/2/2*3"), Q("16./2./2.*3"))
@@ -33,10 +35,11 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("a(:)", a), Q("(1:15)'"))                              ' Colon operator
     Debug.Assert Q("isequal(a,b)", Q("a(1:end)", a), Q("(1:15)"))
     Debug.Assert Q("isequal(a,b)", Q("a(1:3:end)", a), Q("(1:3:15)"))
-    Debug.Assert Q("isequal(a,b)", Q("2+#a*2", a), 32)                                      ' Count operator
+    Debug.Assert Q("isequal(a,b)", Q("2+#a*2", a), 32)                                    ' Count operator
+    Debug.Assert Q("isequal(a,b)", Q("#[]"), 0)
+    
     Debug.Assert Q("isequal(a,b)", Q("1>2"), False)                                         ' Comparison operators
     Debug.Assert Q("isequal(a,b)", Q("1>=2"), False)
-
     Debug.Assert Q("isequal(a,b)", Q("1<2"), True)
     Debug.Assert Q("isequal(a,b)", Q("1<=2"), True)
     Debug.Assert Q("isequal(a,b)", Q("1~=2"), True)
@@ -45,6 +48,8 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("1==2"), False)
     
     For Each arrItem In arr
+        Debug.Assert Q("isequal(a,b)", Q("rows(a)*cols(a)", arrItem), Q("#a", arrItem))
+    
         Debug.Assert Q("isequal(a,b)", Q("a>10", arrItem), Q("~(a<=10)", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("a<10", arrItem), Q("~(a>=10)", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("a==10", arrItem), Q("~(a~=10)", arrItem))
@@ -58,9 +63,17 @@ Sub TestAll()
         
         Debug.Assert Q("isequal(a,b)", Q("a+a", arrItem), Q("2*a", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("a-a", arrItem), Q("0*a", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("a-a", arrItem), Q("zeros(size(a))", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("a./a", arrItem), Q("ones(size(a))", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("a.*a.*a", arrItem), Q("a.^3", arrItem))
         
+        Debug.Assert Q("isequal(a,b)", Q("cumsum(a,1)(end,:)", arrItem), Q("sum(a,1)", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("cumsum(a,2)(:,end)", arrItem), Q("sum(a,2)", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("cumprod(a,1)(end,:)", arrItem), Q("prod(a,1)", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("cumprod(a,2)(:,end)", arrItem), Q("prod(a,2)", arrItem))
+        
         Debug.Assert Q("isequal(a,b)", Q("reshape(a,#a,[])", arrItem), Q("a(:)", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("reshape(a,[],#a)", arrItem), Q("a(:)'", arrItem))
         
         Debug.Assert Q("isequal(a,b)", Q("rows(repmat(a,7,8))", arrItem), Q("rows(a)*7", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("cols(repmat(a,7,8))", arrItem), Q("cols(a)*8", arrItem))

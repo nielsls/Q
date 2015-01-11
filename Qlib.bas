@@ -39,11 +39,13 @@ Private Const SINGLE_OPS = "()[],;:+-#'"
 Private Const COMBO_OPS = ".|&<>~=*/^!"
 
 Private expression As String
-Private arguments As Variant
 Private expressionIndex As Long
 Private currentToken As String
 Private previousTokenIsSpace As Boolean
+
+Private arguments As Variant
 Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
+
 Private errorMsg As String
 
 ' Entry point - the only public function in the library
@@ -71,20 +73,28 @@ ErrorHandler:
     Q = "ERROR - " & errorMsg
 End Function
 
+'*******************************************************************
+' Evaluator invariants:
+'   - All variables must be either strings, scalars or 2d arrays.
+'     A variable cannot be a 1x1 array; then it must be a scalar.
+'     Use Utils_Conform() to correctly shape all variables.
+'   - Variable names: [a-z]
+'   - Function names: [a-z][a-z0-9_]*
+'   - Numbers support e/E exponent
+'   - The empty matrix/scalar [] has per definition 0 rows, 0 cols,
+'     dimension 0 and is internally represented by the default
+'     Variant value Empty
+'*******************************************************************
 
 '*********************
 '*** TOKEN CONTROL ***
 '*********************
 
 Private Sub Tokens_Advance()
-    Dim startIndex As Long: startIndex = expressionIndex
-    
-    Tokens_AdvanceWhile " "
-    previousTokenIsSpace = startIndex <> expressionIndex
-    startIndex = expressionIndex
-    
+    previousTokenIsSpace = Tokens_AdvanceWhile(" ")
     If expressionIndex > Len(expression) Then currentToken = "": Exit Sub
     
+    Dim startIndex As Long: startIndex = expressionIndex
     Select Case Asc(Mid(expression, expressionIndex, 1))
     
         Case Asc("""")
@@ -98,15 +108,16 @@ Private Sub Tokens_Advance()
             
         Case Asc("0") To Asc("9")
             Tokens_AdvanceWhile NUMERICS
-            If Mid(expression, expressionIndex, 1) = "." Then
-                expressionIndex = expressionIndex + 1
+            If Tokens_AdvanceWhile(".", False, True) Then
+                Tokens_AdvanceWhile NUMERICS
+            End If
+            If Tokens_AdvanceWhile("eE", False, True) Then
+                Tokens_AdvanceWhile NUMERICS & "-", False, True
                 Tokens_AdvanceWhile NUMERICS
             End If
                 
         Case Else
-            If InStr(SINGLE_OPS, Mid(expression, expressionIndex, 1)) Then
-                expressionIndex = expressionIndex + 1
-            Else
+            If Not Tokens_AdvanceWhile(SINGLE_OPS, False, True) Then
                 Tokens_AdvanceWhile COMBO_OPS
             End If
          
@@ -122,28 +133,35 @@ Private Sub Tokens_AssertAndAdvance(token As String)
     Tokens_Advance
 End Sub
 
-Private Sub Tokens_AdvanceWhile(str As String, Optional stopAtStr As Boolean = False)
+Private Function Tokens_AdvanceWhile(str As String, _
+    Optional stopAtStr As Boolean = False, _
+    Optional singleCharOnly As Boolean = False) As Boolean
     While expressionIndex <= Len(expression) _
-        And (stopAtStr <> (InStr(str, Mid(expression, expressionIndex, 1)) > 0))
+        And stopAtStr <> (InStr(str, Mid(expression, expressionIndex, 1)) > 0)
         expressionIndex = expressionIndex + 1
+        Tokens_AdvanceWhile = True
+        If singleCharOnly Then Exit Function
     Wend
-End Sub
+End Function
 
-'*******************************************************************
-' Evaluator invariants:
-'   - All variables must be either strings, scalars or 2d arrays.
-'     A variable cannot be a 1x1 array; then it must be a scalar.
-'     Use Utils_Conform() to correctly shape all variables.
-'   - Variable names: [a-z]
-'   - Function names: [a-z][a-z0-9_]*
-'   - The empty matrix/scalar [] has per definition 0 rows, 0 cols,
-'     dimension 0 and is internally represented by the default
-'     Variant value Empty
-'*******************************************************************
+'******************
+'*** BUILD TREE ***
+'******************
 
-'***************************
-'*** SUPPORTED OPERATORS ***
-'***************************
+' Each leaf in the parsed tree is an array with two entries
+' First entry is the name of the function that should be executed.
+' Second entry is a 1-dim array with its arguments
+
+' Parse chain:
+'
+' Binary
+'   Prefix
+'     Postfix
+'       List
+'       Atomic
+'         Binary
+'         Matrix
+'           List
 
 'Returns true if token is a suitable operator
 Private Function Parse_FindOp(token As String, opType As String, ByRef op As Variant) As Boolean
@@ -193,25 +211,6 @@ Private Function Parse_FindOp(token As String, opType As String, ByRef op As Var
     
     Parse_FindOp = Not IsNull(op)
 End Function
-
-'******************
-'*** BUILD TREE ***
-'******************
-
-' Each leaf in the parsed tree is an array with two entries
-' First entry is the name of the function that should be executed.
-' Second entry is a 1-dim array with its arguments
-
-' Parse chain:
-'
-' Binary
-'   Prefix
-'     Postfix
-'       List
-'       Atomic
-'         Binary
-'         Matrix
-'           List
 
 Private Function Parse_Matrix() As Variant
     While currentToken <> "]"
@@ -268,57 +267,52 @@ Private Function Parse_Postfix() As Variant
 End Function
 
 Private Function Parse_Atomic() As Variant
-    Select Case currentToken
-        Case ""
-            Utils_Assert False, "Missing argument"
+    Utils_Assert currentToken <> "", "Missing argument"
+    Select Case Asc(currentToken) ' Filter on first char of token
             
-        Case "end"
-            Parse_Atomic = Array("eval_end", Empty)
-            Tokens_Advance
-            
-        Case ":"
+        Case Asc(":")
             Parse_Atomic = Array("eval_colon", Empty)
             Tokens_Advance
             
-        Case "("
+        Case Asc("(")
             Tokens_Advance
             Parse_Atomic = Parse_Binary()
             Tokens_AssertAndAdvance ")"
             
-        Case "["
+        Case Asc("[")
             Tokens_Advance
             Parse_Atomic = Array("eval_concat", Parse_Matrix())
             Tokens_AssertAndAdvance "]"
-        
+    
+        Case Asc("""") ' Found a constant string
+            Parse_Atomic = Array("eval_constant", Array(Mid(currentToken, 2, Len(currentToken) - 2)))
+            Tokens_Advance
+            
+        Case Asc("0") To Asc("9") ' Found a numeric constant
+            Parse_Atomic = Array("eval_constant", Array(Val(currentToken)))
+            Tokens_Advance
+                    
+        Case Asc("a") To Asc("z")
+            If currentToken = "end" Then
+                Parse_Atomic = Array("eval_end", Empty)
+                Tokens_Advance
+            ElseIf Len(currentToken) = 1 Then ' Found an input variable
+                Parse_Atomic = Array("eval_arg", Array(Asc(currentToken) - Asc("a")))
+                Tokens_Advance
+            Else                   ' Found a function call
+                Parse_Atomic = "fn_" & currentToken
+                Tokens_Advance
+                If currentToken = "(" Then
+                    Tokens_AssertAndAdvance "("
+                    Parse_Atomic = Array(Parse_Atomic, Parse_List())
+                    Tokens_AssertAndAdvance ")"
+                Else
+                    Parse_Atomic = Array(Parse_Atomic, Empty)
+                End If
+            End If
+            
         Case Else
-            Select Case Asc(currentToken) 'filter on first char of token
-                Case Asc("""") ' Found a constant string
-                    Parse_Atomic = Array("eval_constant", Array(Mid(currentToken, 2, Len(currentToken) - 2)))
-                    Tokens_Advance
-                    
-                Case Asc("0") To Asc("9") ' Found a numeric constant
-                    Parse_Atomic = Array("eval_constant", Array(Val(currentToken)))
-                    Tokens_Advance
-                    
-                Case Asc("a") To Asc("z")
-                    If Len(currentToken) = 1 Then ' Found an input variable
-                        Parse_Atomic = Array("eval_arg", Array(Asc(currentToken) - Asc("a")))
-                        Tokens_Advance
-                    Else                   ' Found a function call
-                        Parse_Atomic = "fn_" & currentToken
-                        Tokens_Advance
-                        If currentToken = "(" Then
-                            Tokens_AssertAndAdvance "("
-                            Parse_Atomic = Array(Parse_Atomic, Parse_List())
-                            Tokens_AssertAndAdvance ")"
-                        Else
-                            Parse_Atomic = Array(Parse_Atomic, Empty)
-                        End If
-                    End If
-                    
-                Case Else
-                    Utils_Assert False, "Unexpected token: " & currentToken
-            End Select
+            Utils_Assert False, "Unexpected token: " & currentToken
     End Select
 End Function
 

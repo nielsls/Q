@@ -3,7 +3,7 @@ Q
 
 ###Use MATLAB syntax in Excel
 
-Q is a small VBA library featuring a single public function, Q(), containing an expression parser.
+Q is a small, easy-to-use VBA library featuring a single public function, Q(), containing an expression parser.
 Q() is able to parse and evaluate a subset of the MATLAB programming language.
 It features almost all MATLAB operators, selected standard functions and has complete support for submatrices, '( )', and concatenation, '[ ]'.
 

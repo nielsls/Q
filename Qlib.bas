@@ -17,7 +17,7 @@
 ' Features:
 '   - All standard MATLAB operators: :,::,+,-,*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'
 '   - Most used MATLAB functions: eye,zeros,ones,sum,cumsum,cumprod,prod,
-'     mean,median,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp,inv...
+'     mean,median,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp and many more...
 '   - Indexing via a(2,:) or a(5,3:end)
 '   - Concatenate matrices with '[]', i.e. [ a b; c d]
 '   - Excel functions: if,iferror
@@ -31,7 +31,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.2"
+Private Const VERSION = "1.3"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -42,10 +42,8 @@ Private expression As String
 Private expressionIndex As Long
 Private currentToken As String
 Private previousTokenIsSpace As Boolean
-
 Private arguments As Variant
 Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
-
 Private errorMsg As String
 
 ' Entry point - the only public function in the library
@@ -466,7 +464,7 @@ Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Lo
 End Function
 
 ' Returns the size of the return matrix in functions like zeros, rand, repmat, ...
-' Size must be last in the args and can be either 1 scalar, 2 scalars or a vector with two scalars
+' Size must be last in the args and can be either nothing, 1 scalar, 2 scalars or a vector with two scalars
 Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m As Long, Optional index As Long = 2)
     Select Case Utils_Stack_Size(args)
         Case Is < index
@@ -1065,10 +1063,6 @@ Private Function op_numel(args As Variant) As Variant
     op_numel = Utils_Numel(eval_tree(args(1)))
 End Function
 
-'*****************
-'*** FUNCTIONS ***
-'*****************
-
 ' b = islogical(A)
 '
 ' b = islogical(A) returns true if all elements of A are boolean values.
@@ -1087,7 +1081,7 @@ End Function
 ' I = find(X)
 '
 ' I = find(A) locates all nonzero elements of array X, and returns the linear indices
-' of those elements in vector I. If X is a row vector, then I is a row vector;
+' of those elements in vector I. If X is a row vector, then I is a row vector,
 ' otherwise, I is a column vector. If X contains no nonzero elements or is an empty array,
 ' then I is an empty array.
 Private Function fn_find(args As Variant) As Variant
@@ -1190,6 +1184,7 @@ Private Function fn_floor(args As Variant) As Variant
     fn_floor = r
 End Function
 
+' X = inv(A)
 Private Function fn_inv(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_inv = 1# / args(1)
@@ -1526,9 +1521,7 @@ End Function
 ' X = any(A)
 ' X = any(A,dim)
 '
-' any(...) tests if any of the elements in A evaluates to true.
-' In practice, any() is a natural extension of the logical OR
-' operator.
+' any(...) tests if any of the elements in A evaluates to true. In practice, any() is a natural extension of the logical OR operator.
 Private Function fn_any(args As Variant) As Variant
     If IsEmpty(args(1)) Then fn_any = False: Exit Function
     Dim x As Long, i As Long
@@ -1542,7 +1535,6 @@ Private Function fn_any(args As Variant) As Variant
     Utils_Conform r
     fn_any = r
 End Function
-
 
 ' X = sum(A)
 ' X = sum(A,dim)
@@ -1998,6 +1990,7 @@ Private Function fn_sort(args As Variant) As Variant
     fn_sort = args(1)
 End Function
 
+' Not implemented yet
 Private Function fn_sorttable(args As Variant) As Variant
     Utils_Assert False, "Not implemented yet..."
 End Function
@@ -2045,6 +2038,37 @@ Private Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend
         End If
     End If
     If Not ascend Then Utils_QuickSortCompare = -Utils_QuickSortCompare
+End Function
+
+' X = arrayfun(func,A1,...,An)
+'
+' arrayfun(...) calls the Excel function specified by func and passes elements from
+' A1 to An, where n is the number of inputs to func.
+' A1 to An must all be scalars or matrices with the same size
+Private Function fn_arrayfun(args As Variant) As Variant
+    Utils_AssertArgsCount args, 2, 100
+    Utils_Assert TypeName(args(1)) = "String", "apply(): 1st argument must be an Excel function name."
+    Dim i As Long, r1 As Long, c1 As Long, r2 As Long, c2 As Long
+    r1 = -1: c1 = -1
+    For i = 2 To Utils_Stack_Size(args)
+        Utils_ForceMatrix args(i)
+        Utils_Size args(i), r2, c2
+        Utils_Assert (r2 = 1 And c2 = 1) Or (r1 < 0 And c1 < 0) Or (r1 = r2 And c1 = c2), "apply(): Wrong input sizes."
+        r1 = MAX(r1, r2): c1 = MAX(c1, c2)
+    Next i
+    Dim v, r: ReDim r(r1, c1)
+    For r1 = 1 To UBound(r, 1)
+        For c1 = 1 To UBound(r, 2)
+            v = Empty
+            For i = 2 To Utils_Stack_Size(args)
+                Utils_Size args(i), r2, c2
+                Utils_Stack_Push args(i)(MIN(r1, r2), MIN(c1, c2)), v
+            Next i
+            r(r1, c1) = Evaluate(args(1) & "(" & Join(v, ",") & ")")
+        Next c1
+    Next r1
+    Utils_Conform r
+    fn_arrayfun = r
 End Function
 
 ' v = version

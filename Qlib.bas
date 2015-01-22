@@ -42,8 +42,10 @@ Private expression As String
 Private expressionIndex As Long
 Private currentToken As String
 Private previousTokenIsSpace As Boolean
+
 Private arguments As Variant
 Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
+
 Private errorMsg As String
 
 ' Entry point - the only public function in the library
@@ -240,11 +242,11 @@ End Function
 
 Private Function Parse_Prefix() As Variant
     Dim op
-    If Not Parse_FindOp(currentToken, "unaryprefix", op) Then
-        Parse_Prefix = Parse_Postfix()
-    Else
+    If Parse_FindOp(currentToken, "unaryprefix", op) Then
         Tokens_Advance
         Parse_Prefix = Array("op_" & op, Array(Parse_Prefix()))
+    Else
+        Parse_Prefix = Parse_Postfix()
     End If
 End Function
 
@@ -1063,6 +1065,10 @@ Private Function op_numel(args As Variant) As Variant
     op_numel = Utils_Numel(eval_tree(args(1)))
 End Function
 
+'*****************
+'*** FUNCTIONS ***
+'*****************
+
 ' b = islogical(A)
 '
 ' b = islogical(A) returns true if all elements of A are boolean values.
@@ -1081,7 +1087,7 @@ End Function
 ' I = find(X)
 '
 ' I = find(A) locates all nonzero elements of array X, and returns the linear indices
-' of those elements in vector I. If X is a row vector, then I is a row vector,
+' of those elements in vector I. If X is a row vector, then I is a row vector;
 ' otherwise, I is a column vector. If X contains no nonzero elements or is an empty array,
 ' then I is an empty array.
 Private Function fn_find(args As Variant) As Variant
@@ -1184,7 +1190,6 @@ Private Function fn_floor(args As Variant) As Variant
     fn_floor = r
 End Function
 
-' X = inv(A)
 Private Function fn_inv(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_inv = 1# / args(1)
@@ -1521,7 +1526,9 @@ End Function
 ' X = any(A)
 ' X = any(A,dim)
 '
-' any(...) tests if any of the elements in A evaluates to true. In practice, any() is a natural extension of the logical OR operator.
+' any(...) tests if any of the elements in A evaluates to true.
+' In practice, any() is a natural extension of the logical OR
+' operator.
 Private Function fn_any(args As Variant) As Variant
     If IsEmpty(args(1)) Then fn_any = False: Exit Function
     Dim x As Long, i As Long
@@ -1535,6 +1542,7 @@ Private Function fn_any(args As Variant) As Variant
     Utils_Conform r
     fn_any = r
 End Function
+
 
 ' X = sum(A)
 ' X = sum(A,dim)
@@ -1945,9 +1953,6 @@ Private Function fn_count(args As Variant) As Variant
     fn_count = r
 End Function
 
-' X = diff(A)
-' X = diff(A,dim)
-' X = diff(A,dim,n)
 Private Function fn_diff(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
     If IsEmpty(args(1)) Then Exit Function
@@ -1990,7 +1995,6 @@ Private Function fn_sort(args As Variant) As Variant
     fn_sort = args(1)
 End Function
 
-' Not implemented yet
 Private Function fn_sorttable(args As Variant) As Variant
     Utils_Assert False, "Not implemented yet..."
 End Function

@@ -2109,5 +2109,6 @@ End Function
 '
 ' Returns a string with the current version of the Q library.
 Private Function fn_version(args As Variant) As Variant
-    fn_version = VERSION & "hejsa"
+    Utils_AssertArgsCount args, 0, 0
+    fn_version = VERSION
 End Function

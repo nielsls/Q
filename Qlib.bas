@@ -69,7 +69,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
 ErrorHandler:
     ' Cannot rely on usual error message transfer only as
     ' this does not work when using Application.Run()
-    If errorMsg = "" Then errorMsg = err.Description
+    If errorMsg = "" Then errorMsg = Err.Description
     Q = "ERROR - " & errorMsg
 End Function
 
@@ -95,7 +95,7 @@ Private Sub Tokens_Advance()
     If expressionIndex > Len(expression) Then currentToken = "": Exit Sub
     
     Dim startIndex As Long: startIndex = expressionIndex
-    Select Case Asc(Mid(expression, expressionIndex, 1))
+    Select Case Asc(mid(expression, expressionIndex, 1))
     
         Case Asc("""")
             expressionIndex = expressionIndex + 1
@@ -123,9 +123,9 @@ Private Sub Tokens_Advance()
          
     End Select
     
-    currentToken = Mid(expression, startIndex, expressionIndex - startIndex)
+    currentToken = mid(expression, startIndex, expressionIndex - startIndex)
     Utils_Assert expressionIndex > startIndex Or expressionIndex > Len(expression), _
-        "Illegal char: " & Mid(expression, expressionIndex, 1)
+        "Illegal char: " & mid(expression, expressionIndex, 1)
 End Sub
 
 Private Sub Tokens_AssertAndAdvance(token As String)
@@ -137,7 +137,7 @@ Private Function Tokens_AdvanceWhile(str As String, _
     Optional stopAtStr As Boolean = False, _
     Optional singleCharOnly As Boolean = False) As Boolean
     While expressionIndex <= Len(expression) _
-        And stopAtStr <> (InStr(str, Mid(expression, expressionIndex, 1)) > 0)
+        And stopAtStr <> (InStr(str, mid(expression, expressionIndex, 1)) > 0)
         expressionIndex = expressionIndex + 1
         Tokens_AdvanceWhile = True
         If singleCharOnly Then Exit Function
@@ -285,7 +285,7 @@ Private Function Parse_Atomic() As Variant
             Tokens_AssertAndAdvance "]"
     
         Case Asc("""") ' Found a constant string
-            Parse_Atomic = Array("eval_constant", Array(Mid(currentToken, 2, Len(currentToken) - 2)))
+            Parse_Atomic = Array("eval_constant", Array(mid(currentToken, 2, Len(currentToken) - 2)))
             Tokens_Advance
             
         Case Asc("0") To Asc("9") ' Found a numeric constant
@@ -523,7 +523,7 @@ End Sub
 Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "Unknown error")
     If expr Then Exit Sub
     errorMsg = msg
-    err.Raise vbObjectError + 999
+    Err.Raise vbObjectError + 999
 End Sub
 
 '**********************
@@ -664,7 +664,7 @@ Private Function eval_index(args As Variant) As Variant
     Exit Function
     
 ErrorHandler:
-    Utils_Assert False, err.Description
+    Utils_Assert False, Err.Description
 End Function
 
 ' Evaluates matrix concatenation []
@@ -724,7 +724,7 @@ End Function
 
 ' Matches operator !
 Private Function op_extern(args As Variant) As Variant
-    args(1)(1) = Mid(args(1)(1), 4)
+    args(1)(1) = mid(args(1)(1), 4)
     Dim a: a = args(1)(2)
     Utils_CalcArgs a
     Select Case UBound(a)
@@ -1444,6 +1444,36 @@ Private Function fn_cumprod(args As Variant) As Variant
     fn_cumprod = args(1)
 End Function
 
+' B = cummax(A)
+' B = cummax(A,dim)
+Private Function fn_cummax(args As Variant) As Variant
+    Dim i As Long, j As Long, x As Long
+    Utils_ForceMatrix args(1)
+    x = Utils_CalcDimDirection(args)
+    For i = 2 - x To UBound(args(1), 1)
+        For j = 1 + x To UBound(args(1), 2)
+            args(1)(i, j) = MAX(args(1)(i, j), args(1)(i - (1 - x), j - x))
+        Next j
+    Next i
+    Utils_Conform args(1)
+    fn_cummax = args(1)
+End Function
+
+' B = cummin(A)
+' B = cummin(A,dim)
+Private Function fn_cummin(args As Variant) As Variant
+    Dim i As Long, j As Long, x As Long
+    Utils_ForceMatrix args(1)
+    x = Utils_CalcDimDirection(args)
+    For i = 2 - x To UBound(args(1), 1)
+        For j = 1 + x To UBound(args(1), 2)
+            args(1)(i, j) = MIN(args(1)(i, j), args(1)(i - (1 - x), j - x))
+        Next j
+    Next i
+    Utils_Conform args(1)
+    fn_cummin = args(1)
+End Function
+
 ' X = std(A)
 ' X = std(A,dim)
 '
@@ -1650,7 +1680,7 @@ Private Function fn_max(args As Variant) As Variant
     Utils_Size args(1), r1, c1
     
     If UBound(args) = 1 Or UBound(args) = 3 Then
-        Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
+        If UBound(args) = 3 Then Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
         x = Utils_CalcDimDirection(args, 3)
         ReDim r(x * r1 + (1 - x), (1 - x) * c1 + x)
         For i = 1 To UBound(r, -x + 2)
@@ -1686,7 +1716,7 @@ Private Function fn_min(args As Variant) As Variant
     Utils_Size args(1), r1, c1
     
     If UBound(args) = 1 Or UBound(args) = 3 Then
-        Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
+        If UBound(args) = 3 Then Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
         x = Utils_CalcDimDirection(args, 3)
         ReDim r(x * r1 + (1 - x), (1 - x) * c1 + x)
         For i = 1 To UBound(r, -x + 2)
@@ -2079,5 +2109,5 @@ End Function
 '
 ' Returns a string with the current version of the Q library.
 Private Function fn_version(args As Variant) As Variant
-    fn_version = VERSION
+    fn_version = VERSION & "hejsa"
 End Function

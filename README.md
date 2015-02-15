@@ -27,4 +27,11 @@ It features almost all MATLAB operators, selected standard functions and has com
   - Excel functions: <i>if,iferror</i>
   - Prefix function calls with ! to call external VBA functions not found in Q.
 
+###How to install
+1. Open up Excel
+2. Press Alt+F11 to open the VBA editor
+3. Choose Insert -> Module
+4. Copy-paste the contents of [Qlib.bas](https://raw.githubusercontent.com/nielsls/Q/master/Qlib.bas) to your new module
+5. Done! Go test it in Excel by inserting `=Q("2+2")` in a cell
+
 2015, Niels Lykke Sørensen

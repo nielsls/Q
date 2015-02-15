@@ -27,7 +27,7 @@ It features almost all MATLAB operators, selected standard functions and has com
   - Excel functions: <i>if,iferror</i>
   - Prefix function calls with ! to call external VBA functions not found in Q.
 
-###How to install
+###How to use
 1. Open up Excel
 2. Press Alt+F11 to open the VBA editor
 3. Choose Insert -> Module

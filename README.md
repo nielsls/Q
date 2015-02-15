@@ -32,6 +32,6 @@ It features almost all MATLAB operators, selected standard functions and has com
 2. Press Alt+F11 to open the VBA editor
 3. Choose Insert -> Module
 4. Copy-paste the contents of [Qlib.bas](https://raw.githubusercontent.com/nielsls/Q/master/Qlib.bas) to your new module
-5. Done! Go test it in Excel by inserting `=Q("2+2")` in a cell
+5. Done! Go test in Excel by typing `=Q("2+2")` in a cell
 
 2015, Niels Lykke Sørensen

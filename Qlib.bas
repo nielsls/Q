@@ -95,7 +95,7 @@ Private Sub Tokens_Advance()
     If expressionIndex > Len(expression) Then currentToken = "": Exit Sub
     
     Dim startIndex As Long: startIndex = expressionIndex
-    Select Case Asc(mid(expression, expressionIndex, 1))
+    Select Case Asc(Mid(expression, expressionIndex, 1))
     
         Case Asc("""")
             expressionIndex = expressionIndex + 1
@@ -123,9 +123,9 @@ Private Sub Tokens_Advance()
          
     End Select
     
-    currentToken = mid(expression, startIndex, expressionIndex - startIndex)
+    currentToken = Mid(expression, startIndex, expressionIndex - startIndex)
     Utils_Assert expressionIndex > startIndex Or expressionIndex > Len(expression), _
-        "Illegal char: " & mid(expression, expressionIndex, 1)
+        "Illegal char: " & Mid(expression, expressionIndex, 1)
 End Sub
 
 Private Sub Tokens_AssertAndAdvance(token As String)
@@ -137,7 +137,7 @@ Private Function Tokens_AdvanceWhile(str As String, _
     Optional stopAtStr As Boolean = False, _
     Optional singleCharOnly As Boolean = False) As Boolean
     While expressionIndex <= Len(expression) _
-        And stopAtStr <> (InStr(str, mid(expression, expressionIndex, 1)) > 0)
+        And stopAtStr <> (InStr(str, Mid(expression, expressionIndex, 1)) > 0)
         expressionIndex = expressionIndex + 1
         Tokens_AdvanceWhile = True
         If singleCharOnly Then Exit Function
@@ -285,7 +285,7 @@ Private Function Parse_Atomic() As Variant
             Tokens_AssertAndAdvance "]"
     
         Case Asc("""") ' Found a constant string
-            Parse_Atomic = Array("eval_constant", Array(mid(currentToken, 2, Len(currentToken) - 2)))
+            Parse_Atomic = Array("eval_constant", Array(Mid(currentToken, 2, Len(currentToken) - 2)))
             Tokens_Advance
             
         Case Asc("0") To Asc("9") ' Found a numeric constant
@@ -724,7 +724,7 @@ End Function
 
 ' Matches operator !
 Private Function op_extern(args As Variant) As Variant
-    args(1)(1) = mid(args(1)(1), 4)
+    args(1)(1) = Mid(args(1)(1), 4)
     Dim a: a = args(1)(2)
     Utils_CalcArgs a
     Select Case UBound(a)
@@ -1522,8 +1522,7 @@ Private Function fn_cov(args As Variant) As Variant
     Dim r: ReDim r(c, c)
     Dim i As Long, j As Long
     For i = 1 To c
-        r(i, i) = 1
-        For j = i + 1 To c
+        For j = i To c
             r(i, j) = WorksheetFunction.Covar( _
                 WorksheetFunction.index(args(1), 0, i), _
                 WorksheetFunction.index(args(1), 0, j))
@@ -1572,7 +1571,6 @@ Private Function fn_any(args As Variant) As Variant
     Utils_Conform r
     fn_any = r
 End Function
-
 
 ' X = sum(A)
 ' X = sum(A,dim)

@@ -725,57 +725,6 @@ Private Function eval_concat(args As Variant) As Variant
 
 End Function
 
-' Evaluates matrix concatenation []
-Private Function eval_concatOLD(args As Variant) As Variant
-
-    ' Get matrices and check their sizes are compatible for concatenation
-    Dim totalRows As Long, totalCols As Long
-    Dim requiredRows As Long, requiredCols As Long
-    Dim rows As Long, cols As Long, i As Long, j As Long
-    For i = 1 To Utils_Stack_Size(args)
-        totalCols = 0
-        For j = 1 To Utils_Stack_Size(args(i))
-            args(i)(j) = eval_tree(args(i)(j))
-            Utils_Size args(i)(j), rows, cols
-            If j = 1 Then
-                requiredRows = rows
-            Else
-                Utils_Assert requiredRows = rows, "Concatenation: Different row counts"
-            End If
-            totalCols = totalCols + cols
-        Next j
-        If i = 1 Then
-            requiredCols = totalCols
-        Else
-            Utils_Assert requiredCols = totalCols, "Concatenation: Different column counts"
-        End If
-        totalRows = totalRows + rows
-    Next i
-    
-    ' Perform the actual concatenation by copying input matrices
-    If totalRows = 0 Or totalCols = 0 Then Exit Function
-    Dim r: ReDim r(totalRows, totalCols)
-    Dim x As Long, y As Long
-    totalRows = 0
-    For i = 1 To Utils_Stack_Size(args)
-        totalCols = 0
-        For j = 1 To Utils_Stack_Size(args(i))
-            Utils_ForceMatrix args(i)(j)
-            Utils_Size args(i)(j), rows, cols
-            For x = 1 To rows
-                For y = 1 To cols
-                    r(totalRows + x, totalCols + y) = args(i)(j)(x, y)
-                Next y
-            Next x
-            totalCols = totalCols + cols
-        Next j
-        totalRows = totalRows + rows
-    Next i
-    Utils_Conform r
-    eval_concat = r
-
-End Function
-
 '*****************
 '*** OPERATORS ***
 '*****************

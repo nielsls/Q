@@ -31,7 +31,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.31"
+Private Const VERSION = "1.3"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -669,6 +669,64 @@ End Function
 
 ' Evaluates matrix concatenation []
 Private Function eval_concat(args As Variant) As Variant
+
+    ' Get matrices and check their sizes are compatible for concatenation
+    Dim totalRows As Long, totalCols As Long
+    Dim requiredRows As Long, requiredCols As Long
+    Dim rows As Long, cols As Long, i As Long, j As Long
+    requiredCols = 0
+    For i = 1 To Utils_Stack_Size(args) ' loop over each row
+        totalCols = 0
+        requiredRows = 0
+        For j = 1 To Utils_Stack_Size(args(i)) ' loop over each column
+            args(i)(j) = eval_tree(args(i)(j))
+            Utils_Size args(i)(j), rows, cols
+            If requiredRows = 0 Then
+                requiredRows = rows
+            Else
+                Utils_Assert requiredRows = rows Or rows = 0, "Concatenation: Different row counts"
+            End If
+            totalCols = totalCols + cols
+        Next j
+        If requiredCols = 0 Then
+            requiredCols = totalCols
+        Else
+            Utils_Assert requiredCols = totalCols Or totalCols = 0, "Concatenation: Different column counts"
+        End If
+        totalRows = totalRows + requiredRows
+    Next i
+    totalCols = requiredCols 'Needed in case last row was []
+    
+    ' Perform the actual concatenation by copying input matrices
+    If totalRows = 0 Or totalCols = 0 Then Exit Function
+    Dim r: ReDim r(totalRows, totalCols)
+    Dim x As Long, y As Long
+    totalRows = 0
+    For i = 1 To Utils_Stack_Size(args)
+        totalCols = 0
+        For j = 1 To Utils_Stack_Size(args(i))
+            If IsEmpty(args(i)(j)) Then
+                rows = 0: cols = 0
+            Else
+                Utils_ForceMatrix args(i)(j)
+                Utils_Size args(i)(j), rows, cols
+                For x = 1 To rows
+                    For y = 1 To cols
+                        r(totalRows + x, totalCols + y) = args(i)(j)(x, y)
+                    Next y
+                Next x
+            End If
+            totalCols = totalCols + cols
+        Next j
+        totalRows = totalRows + rows
+    Next i
+    Utils_Conform r
+    eval_concat = r
+
+End Function
+
+' Evaluates matrix concatenation []
+Private Function eval_concatOLD(args As Variant) As Variant
 
     ' Get matrices and check their sizes are compatible for concatenation
     Dim totalRows As Long, totalCols As Long
@@ -1661,7 +1719,7 @@ Private Function fn_prctile(args As Variant) As Variant
     Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
     For i = 1 To UBound(r, -x + 2)
         r(x * i + (1 - x), (1 - x) * i + x) _
-            = WorksheetFunction.Percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
+            = WorksheetFunction.percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
     Next i
     Utils_Conform r
     fn_prctile = r

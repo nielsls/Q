@@ -31,7 +31,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.3"
+Private Const VERSION = "1.31"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"

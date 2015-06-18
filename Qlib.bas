@@ -1589,7 +1589,7 @@ End Function
 ' The dim input is a positive integer scalar.
 Private Function fn_sum(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 2
-    If IsEmpty(args(1)) Then fn_sum = 1: Exit Function
+    If IsEmpty(args(1)) Then fn_sum = 0: Exit Function
     Dim x As Long, i As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)

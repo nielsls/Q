@@ -960,7 +960,7 @@ Private Function op_uminus(args As Variant) As Variant
         op_uminus = -args(1)
     Else
         Dim i As Long, j As Long
-        ReDim r(rows, cols)
+        Dim r: ReDim r(rows, cols)
         For i = 1 To rows
             For j = 1 To cols
                 r(i, j) = -args(1)(i, j)

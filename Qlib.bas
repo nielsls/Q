@@ -31,7 +31,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.3"
+Private Const VERSION = "1.31"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -480,13 +480,13 @@ Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m
                     n = args(index)(1, 1)
                     m = args(index)(MIN(2, UBound(args(index), 1)), MIN(2, UBound(args(index), 2)))
                 Case Else
-                    Utils_Assert False, "Bad input format."
+                    Utils_Assert False, "Bad input format"
             End Select
         Case Is = index + 1
             n = args(index)
             m = args(index + 1)
         Case Else
-            Utils_Assert False, "Bad size input."
+            Utils_Assert False, "Bad size input"
     End Select
 End Function
 
@@ -507,7 +507,7 @@ Private Function Utils_SetupBinaryOperation(args As Variant, r As Variant, _
     Utils_ForceMatrix args(1): Utils_Size args(1), r1, c1
     Utils_ForceMatrix args(2): Utils_Size args(2), r2, c2
     Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2), _
-        "Dimension mismatch."
+        "Dimension mismatch"
     ReDim r(MAX(r1, r2), MAX(c1, c2))
 End Function
 
@@ -515,8 +515,8 @@ End Function
 ' has been called with the right number of arguments
 Private Sub Utils_AssertArgsCount(args As Variant, lb As Long, ub As Long)
     Dim size As Long: size = Utils_Stack_Size(args)
-    Utils_Assert size >= lb, "Too few arguments."
-    Utils_Assert size <= ub, "Too many arguments."
+    Utils_Assert size >= lb, "Too few arguments"
+    Utils_Assert size <= ub, "Too many arguments"
 End Sub
 
 ' Allows each Q function to fail gracefully with a nice error message.
@@ -574,7 +574,7 @@ Private Function eval_end(args As Variant) As Variant
 End Function
 
 Private Function eval_colon(args As Variant) As Variant
-    Utils_Assert False, "colon not allowed here..."
+    Utils_Assert False, "colon not allowed here"
 End Function
 
 Private Function Utils_IsVectorShape(r As Long, c As Long) As Boolean
@@ -610,13 +610,13 @@ Private Function eval_index(args As Variant) As Variant
     Utils_ForceMatrix args(1)
     Utils_Size args(1), matrows, matcols
     
-    On Error GoTo ErrorHandler
     Select Case Utils_Stack_Size(args(2))
         
         Case 0:
-            Exit Function
+            r = args(1)
         
         Case 1:
+            On Error GoTo ErrorHandler
             i1 = eval_indexarg(args(2)(1), matrows * matcols)
             Utils_Size i1, r1, c1
             If r1 = 0 Or c1 = 0 Then Exit Function
@@ -636,8 +636,10 @@ Private Function eval_index(args As Variant) As Variant
                 Utils_Ind2Sub UBound(r, 1), idx, r_i, r_j
                 r(r_i, r_j) = args(1)(arg_i, arg_j)
             Next idx
+            On Error GoTo 0
             
         Case 2:
+            On Error GoTo ErrorHandler
             i1 = eval_indexarg(args(2)(1), matrows)
             i2 = eval_indexarg(args(2)(2), matcols)
             Utils_Size i1, r1, c1
@@ -653,9 +655,10 @@ Private Function eval_index(args As Variant) As Variant
                     r(r_i, r_j) = args(1)(i1(i1_i, i1_j), i2(i2_i, i2_j))
                 Next r_j
             Next r_i
+            On Error GoTo 0
             
         Case Else:
-            Debug.Print "Too many index arguments..."
+            Utils_Assert False, "Too many index arguments"
     
     End Select
 
@@ -706,7 +709,8 @@ Private Function eval_concat(args As Variant) As Variant
         totalCols = 0
         For j = 1 To Utils_Stack_Size(args(i))
             If IsEmpty(args(i)(j)) Then
-                rows = 0: cols = 0
+                rows = 0
+                cols = 0
             Else
                 Utils_ForceMatrix args(i)(j)
                 Utils_Size args(i)(j), rows, cols
@@ -960,7 +964,7 @@ Private Function op_uminus(args As Variant) As Variant
         op_uminus = -args(1)
     Else
         Dim i As Long, j As Long
-        Dim r: ReDim r(rows, cols)
+        ReDim r(rows, cols)
         For i = 1 To rows
             For j = 1 To cols
                 r(i, j) = -args(1)(i, j)
@@ -1668,7 +1672,7 @@ Private Function fn_prctile(args As Variant) As Variant
     Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
     For i = 1 To UBound(r, -x + 2)
         r(x * i + (1 - x), (1 - x) * i + x) _
-            = WorksheetFunction.percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
+            = WorksheetFunction.Percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
     Next i
     Utils_Conform r
     fn_prctile = r
@@ -1878,8 +1882,8 @@ End Function
 ' X = repmat(A,[n m])
 '
 ' X = repmat(A,n) creates a large matrix X consisting of an n-by-n tiling of A.
-' X = repmat(A,n,m) creates a large matrix X consisting of an m-by-n tiling of A.
-' X = repmat(A,[n m]) creates a large matrix X consisting of an m-by-n tiling of A.
+' X = repmat(A,n,m) creates a large matrix X consisting of an n-by-m tiling of A.
+' X = repmat(A,[n m]) creates a large matrix X consisting of an n-by-m tiling of A.
 Private Function fn_repmat(args As Variant) As Variant
     Dim r1 As Long, c1 As Long, n As Long, m As Long, i As Long, j As Long
     Utils_AssertArgsCount args, 2, 3

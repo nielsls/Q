@@ -31,7 +31,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.31"
+Private Const VERSION = "1.40"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -1993,11 +1993,14 @@ Private Function fn_count(args As Variant) As Variant
     fn_count = r
 End Function
 
+' Y = diff(X)
+' Y = diff(X,n)
+' Y = diff(X,n,dim)
 Private Function fn_diff(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
     If IsEmpty(args(1)) Then Exit Function
     Utils_ForceMatrix args(1)
-    Dim x As Long: x = Utils_CalcDimDirection(args)
+    Dim x As Long: x = Utils_CalcDimDirection(args, 3)
     If UBound(args(1), 1 + x) < 2 Then Exit Function
     Dim i As Long, j As Long
     Dim r: ReDim r(UBound(args(1), 1) - (1 - x), UBound(args(1), 2) - x)
@@ -2008,62 +2011,133 @@ Private Function fn_diff(args As Variant) As Variant
     Next i
     Utils_Conform r
     fn_diff = r
-    Dim n As Long: n = Utils_GetOptionalArg(args, 3, 1)
-    If n > 1 Then fn_diff = fn_diff(Array(r, 1 + x, n - 1))
+    Dim n As Long: n = Utils_GetOptionalArg(args, 2, 1)
+    If n > 1 Then fn_diff = fn_diff(Array(r, n - 1, 1 + x))
+End Function
+
+' B = unique(A)
+'
+' B = unique(A) returns a column vector with all the unique elements of A.
+' The values of B are in sorted order.
+Private Function fn_unique(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
+    Dim rows As Long, cols As Long, i As Long, count As Long, save
+    args(1) = fn_reshape(Array(args(1), Empty, 1))
+    args(1) = fn_sort(Array(args(1)))
+    Utils_ForceMatrix args(1)
+    Utils_Size args(1), rows, cols
+    ReDim save(1 To rows - 1)
+    count = 1
+    For i = 1 To UBound(save)
+        save(i) = (0 <> Utils_QuickSortCompare(args(1)(i, 1), args(1)(i + 1, 1), True))
+        count = count - CLng(save(i))
+    Next i
+    Dim r: ReDim r(1 To count, 1)
+    r(1, 1) = args(1)(1, 1)
+    count = 2
+    For i = 1 To UBound(save)
+        If save(i) Then
+            r(count, 1) = args(1)(i + 1, 1)
+            count = count + 1
+        End If
+    Next i
+    Utils_Conform r
+    fn_unique = r
 End Function
 
 ' B = sort(A)
 ' B = sort(A,dim)
 ' B = sort(A,dim,mode)
+' B = sort(A,dim,mode,"indices")
 '
 ' sort(...) sorts the entries in each row or column.
-' Parameter mode must be either "ascend" or "descend"
+'
+' mode must be either "ascend" or "descend"
+'
+' If "indices" is provided, sort() will return the sorted indices
+' instead of the sorted values.
 Private Function fn_sort(args As Variant) As Variant
-    Utils_AssertArgsCount args, 1, 3
-    Dim x As Long: x = Utils_CalcDimDirection(args)
-    Dim ascend As Boolean: ascend = "ascend" = LCase(Utils_GetOptionalArg(args, 3, "ascend"))
-    If x = 1 Then
+    Utils_AssertArgsCount args, 1, 4
+    
+    ' Get all input parameters
+    Dim sortRows As Boolean, ascend As Boolean, returnIndices As Boolean
+    sortRows = (1 = Utils_CalcDimDirection(args))
+    ascend = ("ascend" = LCase(Utils_GetOptionalArg(args, 3, "ascend")))
+    returnIndices = ("indices" = LCase(Utils_GetOptionalArg(args, 4, "")))
+    
+    ' Transpose input matrix if rows must be sorted
+    If sortRows Then
         args(1) = WorksheetFunction.Transpose(args(1))
         Utils_Conform args(1)
     End If
+    
+    ' Make sure the input is a matrix so we can access it like (i,j)
     Utils_ForceMatrix args(1)
-    Dim i As Long: For i = 1 To UBound(args(1), 2)
-        Utils_QuickSortCol args(1), 1, UBound(args(1), 1), i, ascend
-    Next i
-    If x = 1 Then args(1) = WorksheetFunction.Transpose(args(1))
-    Utils_Conform args(1)
-    fn_sort = args(1)
-End Function
 
-Private Function fn_sorttable(args As Variant) As Variant
-    Utils_Assert False, "Not implemented yet..."
+    ' Create an equal-sized array containing indices
+    ' Initially, the indices are just 1,2,3,...,n and
+    ' then the sorting will be done on these indices.
+    Dim rows As Long, cols As Long, i As Long, j As Long
+    Utils_Size args(1), rows, cols
+    Dim indices: ReDim indices(1 To rows, 1 To cols)
+    For i = 1 To rows
+        For j = 1 To cols
+            indices(i, j) = i
+        Next j
+    Next i
+    
+    ' Do the actual sorting of each column
+    For j = 1 To cols
+        Utils_QuickSortCol args(1), indices, 1, rows, j, ascend
+    Next j
+    
+    ' Return the sorted indices if that was specified;
+    ' otherwise build and return a matrix with the sorted values
+    If returnIndices Then
+        fn_sort = indices
+    Else
+        Dim r:  ReDim r(1 To rows, 1 To cols)
+        For i = 1 To rows
+            For j = 1 To cols
+                r(i, j) = args(1)(indices(i, j), j)
+            Next j
+        Next i
+        fn_sort = r
+    End If
+    
+    ' Remember to "transpose back" if we sorted the rows
+    If sortRows Then fn_sort = WorksheetFunction.Transpose(fn_sort)
+    Utils_Conform fn_sort
 End Function
 
 ' Implementation of the quick-sort algorithm - is a helper for fn_sort()
-' Sorts on columns
-Private Function Utils_QuickSortCol(arr As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
+' Sorts on columns by swapping indices.
+' No actual swapping of values in the orignal matrix is done.
+'
+' It sorts the column "col" in the range from "first" to "last"
+Private Function Utils_QuickSortCol(arr As Variant, indices As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
     If first >= last Then Exit Function
     Dim tmp As Variant
-    Dim pivot As Variant: pivot = arr(first, col)
+    Dim pivot As Variant: pivot = arr(indices(first, col), col)
     Dim left As Long: left = first
     Dim right As Long: right = last
     While left <= right
-        While Utils_QuickSortCompare(arr(left, col), pivot, ascend) < 0
+        While Utils_QuickSortCompare(arr(indices(left, col), col), pivot, ascend) < 0
             left = left + 1
         Wend
-        While Utils_QuickSortCompare(arr(right, col), pivot, ascend) > 0
+        While Utils_QuickSortCompare(arr(indices(right, col), col), pivot, ascend) > 0
             right = right - 1
         Wend
         If left <= right Then
-            tmp = arr(left, col)
-            arr(left, col) = arr(right, col)
-            arr(right, col) = tmp
+            tmp = indices(left, col)
+            indices(left, col) = indices(right, col)
+            indices(right, col) = tmp
             left = left + 1
             right = right - 1
         End If
     Wend
-    Utils_QuickSortCol arr, first, right, col, ascend
-    Utils_QuickSortCol arr, left, last, col, ascend
+    Utils_QuickSortCol arr, indices, first, right, col, ascend
+    Utils_QuickSortCol arr, indices, left, last, col, ascend
 End Function
 
 ' Called from Utils_QuickSortCol. Compares numerics and strings.
@@ -2122,3 +2196,4 @@ Private Function fn_version(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 0
     fn_version = VERSION
 End Function
+

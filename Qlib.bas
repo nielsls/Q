@@ -10,14 +10,15 @@
 '   - =Q("2+2")                -> 4
 '   - =Q("a+b+c",3,4,5)        -> 12
 '   - =Q("eye(3)")             -> the 3x3 identity matrix
-'   - =Q("mean(a)",A1:D5)      -> row vector with the mean of each column in cells A1:D5
+'   - =Q("mean(a)",A1:D5)      -> vector with the mean of each column in cells A1:D5
 '   - =Q("a.*b",A1:D5,F1:I5)   -> element wise multiplication of cells A1:D5 and F1:I5
-'   - =Q("a([1 3],end)",A1:D5) -> 2x1 matrix with the last entries in row 1 and 3 of cells A1:D5
+'   - =Q("a([1 3],end)",A1:D5) -> get the last entries in row 1 and 3 of cells A1:D5
+'   - =Q("sort(a)",A1:D5)      -> sort each column of cells A1:D5
 '
 ' Features:
 '   - All standard MATLAB operators: :,::,+,-,*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'
-'   - Most used MATLAB functions: eye,zeros,ones,sum,cumsum,cumprod,prod,
-'     mean,median,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp and many more...
+'   - Most used MATLAB functions: eye,zeros,ones,sum,cumsum,cumprod,prod,mean,median,corr,
+'     cov,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp,sort and many more...
 '   - Indexing via a(2,:) or a(5,3:end)
 '   - Concatenate matrices with '[]', i.e. [ a b; c d]
 '   - Excel functions: if,iferror
@@ -454,15 +455,28 @@ Private Sub Utils_CalcArgs(args As Variant)
     Next i
 End Sub
 
+' Test if a flag was supplied in the args, i.e. such as "descend" in the sort function
+Private Function Utils_IsFlagSet(args As Variant, flag As String) As Boolean
+    Dim i As Long
+    For i = UBound(args) To 1 Step -1
+        If StrComp(TypeName(args(i)), "String") = 0 Then
+            If StrComp(args(i), flag, vbTextCompare) = 0 Then
+                Utils_IsFlagSet = True
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
+
 'do cols -> return 0, do rows -> return 1
-Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Long = 2)
+Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Long = 2) As Long
     If UBound(args) >= dimIndex Then
-        Utils_CalcDimDirection = args(dimIndex) - 1
-    ElseIf Utils_Rows(args(1)) = 1 Then
-        Utils_CalcDimDirection = 1
-    Else
-        Utils_CalcDimDirection = 0
+        If IsNumeric(args(dimIndex)) Then
+            Utils_CalcDimDirection = args(dimIndex) - 1
+            Exit Function
+        End If
     End If
+    Utils_CalcDimDirection = IFF(Utils_Rows(args(1)) = 1, 1, 0)
 End Function
 
 ' Returns the size of the return matrix in functions like zeros, rand, repmat, ...
@@ -530,6 +544,8 @@ End Sub
 '*** EVAL FUNCTIONS ***
 '**********************
 
+' The main eval function
+' Supply an abstract syntax tree and get a value
 Private Function eval_tree(root As Variant) As Variant
     ' Precalculate argument trees for all ordinary functions except if() and iferror()
     If left(root(1), 3) = "fn_" And root(1) <> "fn_if" And root(1) <> "fn_iferror" Then
@@ -1440,7 +1456,7 @@ End Function
 '
 ' B = cumprod(A,dim) returns the cumulative product of the elements along the
 ' dimension of A specified by scalar dim. For example, cumprod(A,1) works
-' along the first dimension (the columns); cumprod(A,2) works along the '
+' along the first dimension (the columns); cumprod(A,2) works along the
 ' second dimension (the rows).
 Private Function fn_cumprod(args As Variant) As Variant
     Dim i As Long, j As Long, x As Long
@@ -2047,23 +2063,21 @@ End Function
 
 ' B = sort(A)
 ' B = sort(A,dim)
-' B = sort(A,dim,mode)
-' B = sort(A,dim,mode,"indices")
+' B = sort(...,"descend")
+' B = sort(...,"indices")
 '
-' sort(...) sorts the entries in each row or column.
+' sort() sorts the entries in each row or column.
 '
-' mode must be either "ascend" or "descend"
-'
-' If "indices" is provided, sort() will return the sorted indices
-' instead of the sorted values.
+' "descend"  Sort descending
+' "indices"  Return sorted indices instead of values
 Private Function fn_sort(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 4
     
     ' Get all input parameters
     Dim sortRows As Boolean, ascend As Boolean, returnIndices As Boolean
     sortRows = (1 = Utils_CalcDimDirection(args))
-    ascend = ("ascend" = LCase(Utils_GetOptionalArg(args, 3, "ascend")))
-    returnIndices = ("indices" = LCase(Utils_GetOptionalArg(args, 4, "")))
+    ascend = Not Utils_IsFlagSet(args, "descend")
+    returnIndices = Utils_IsFlagSet(args, "indices")
     
     ' Transpose input matrix if rows must be sorted
     If sortRows Then
@@ -2112,7 +2126,7 @@ End Function
 
 ' Implementation of the quick-sort algorithm - is a helper for fn_sort()
 ' Sorts on columns by swapping indices.
-' No actual swapping of values in the orignal matrix is done.
+' No actual swapping of values in the original matrix is done.
 '
 ' It sorts the column "col" in the range from "first" to "last"
 Private Function Utils_QuickSortCol(arr As Variant, indices As Variant, first As Long, last As Long, col As Long, ascend As Boolean)
@@ -2121,11 +2135,12 @@ Private Function Utils_QuickSortCol(arr As Variant, indices As Variant, first As
     Dim pivot As Variant: pivot = arr(indices(first, col), col)
     Dim left As Long: left = first
     Dim right As Long: right = last
+    Dim ascendprefix As Long: ascendprefix = -1 - 2 * Sgn(ascend)
     While left <= right
-        While Utils_QuickSortCompare(arr(indices(left, col), col), pivot, ascend) < 0
+        While ascendprefix * Utils_Compare(arr(indices(left, col), col), pivot) < 0
             left = left + 1
         Wend
-        While Utils_QuickSortCompare(arr(indices(right, col), col), pivot, ascend) > 0
+        While ascendprefix * Utils_Compare(pivot, arr(indices(right, col), col)) < 0
             right = right - 1
         Wend
         If left <= right Then
@@ -2141,21 +2156,20 @@ Private Function Utils_QuickSortCol(arr As Variant, indices As Variant, first As
 End Function
 
 ' Called from Utils_QuickSortCol. Compares numerics and strings.
-Private Function Utils_QuickSortCompare(arg1 As Variant, arg2 As Variant, ascend As Boolean) As Variant
+Private Function Utils_Compare(arg1 As Variant, arg2 As Variant) As Variant
     If IsNumeric(arg1) Then
         If IsNumeric(arg2) Then
-            Utils_QuickSortCompare = arg1 - arg2
+            Utils_Compare = arg1 - arg2
         Else
-            Utils_QuickSortCompare = -1
+            Utils_Compare = -1
         End If
     Else
         If IsNumeric(arg2) Then
-            Utils_QuickSortCompare = 1
+            Utils_Compare = 1
         Else
-            Utils_QuickSortCompare = StrComp(CStr(arg1), CStr(arg2))
+            Utils_Compare = StrComp(CStr(arg1), CStr(arg2))
         End If
     End If
-    If Not ascend Then Utils_QuickSortCompare = -Utils_QuickSortCompare
 End Function
 
 ' X = arrayfun(func,A1,...,An)
@@ -2196,4 +2210,3 @@ Private Function fn_version(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 0
     fn_version = VERSION
 End Function
-

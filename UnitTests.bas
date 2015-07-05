@@ -78,7 +78,12 @@ Sub TestAll()
         Debug.Assert Q("isequal(a,b)", Q("rows(repmat(a,7,8))", arrItem), Q("rows(a)*7", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("cols(repmat(a,7,8))", arrItem), Q("cols(a)*8", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("sum(sum(repmat(a,7,8)))", arrItem), Q("sum(sum(a))*7*8", arrItem))
+        
+        Debug.Assert Q("isequal(a,b)", Q("cummax(a)", a), Q("-cummin(-a,1)", a))
+        Debug.Assert Q("isequal(a,b)", Q("cummax(a,2)", a), Q("-cummin(-a,2)", a))
     Next arrItem
+
+    Debug.Assert Q("isequal(a,b)", Q("sort(a)", a), Q("sort(a, ""descend"")(end:-1:1,:)", a))
 
     Debug.Assert Q("isequal(a,b)", Q("7''"), 7)                                            ' Arithmetic operators
     Debug.Assert Q("isequal(a,b)", Q("((7*a)./(a*7))(1,1)", a), 1)
@@ -96,5 +101,6 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("islogical(17)"), False)
     Debug.Assert Q("isequal(a,b)", Q("islogical(a>10)", a), True)
     Debug.Assert Q("isequal(a,b)", Q("islogical(a)", a), False)
+    
 
 End Sub

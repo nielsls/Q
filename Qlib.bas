@@ -2045,7 +2045,7 @@ Private Function fn_unique(args As Variant) As Variant
     ReDim save(1 To rows - 1)
     count = 1
     For i = 1 To UBound(save)
-        save(i) = (0 <> Utils_QuickSortCompare(args(1)(i, 1), args(1)(i + 1, 1), True))
+        save(i) = (0 <> Utils_Compare(args(1)(i, 1), args(1)(i + 1, 1)))
         count = count - CLng(save(i))
     Next i
     Dim r: ReDim r(1 To count, 1)

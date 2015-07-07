@@ -14,7 +14,7 @@
 '   - =Q("a.*b",A1:D5,F1:I5)   -> element wise multiplication of cells A1:D5 and F1:I5
 '   - =Q("a([1 3],end)",A1:D5) -> get the last entries in row 1 and 3 of cells A1:D5
 '   - =Q("sort(a)",A1:D5)      -> sort each column of cells A1:D5
-'   - =Q("2+3;ans^2")          -> 25
+'   - =Q("3+4;ans^2")          -> 49
 '                                 Multiple expressions are separated by ";" or linebreak.
 '                                 "ans" returns the last result and the very last
 '                                 result is then returned by Q().
@@ -1253,7 +1253,7 @@ Private Function fn_inv(args As Variant) As Variant
     If Utils_Dimensions(args(1)) = 0 Then
         fn_inv = 1# / args(1)
     Else
-        Utils_Assert UBound(args(1), 1) = UBound(args(1), 2), "inv: matrix not quadratic."
+        Utils_Assert UBound(args(1), 1) = UBound(args(1), 2), "matrix not quadratic"
         fn_inv = WorksheetFunction.MInverse(args(1))
     End If
 End Function
@@ -1262,54 +1262,51 @@ End Function
 '
 ' X = exp(A) returns the exponential for each element of A.
 Private Function fn_exp(args As Variant) As Variant
-    If Utils_Dimensions(args(1)) = 0 Then
-        fn_exp = Exp(args(1))
-    Else
-        Dim i As Long, j As Long
-        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
-        For i = 1 To UBound(r, 1)
-            For j = 1 To UBound(r, 2)
-                r(i, j) = Exp(args(1)(i, j))
-            Next j
-        Next i
-        fn_exp = r
-    End If
+    Utils_AssertArgsCount args, 1, 1
+    Utils_ForceMatrix args(1)
+    Dim i As Long, j As Long
+    Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+    For i = 1 To UBound(r, 1)
+        For j = 1 To UBound(r, 2)
+            r(i, j) = Exp(args(1)(i, j))
+        Next j
+    Next i
+    Utils_Conform r
+    fn_exp = r
 End Function
 
 ' X = log(A)
 '
 ' X = log(A) returns the natural logarithm of the elements of A.
 Private Function fn_log(args As Variant) As Variant
-    If Utils_Dimensions(args(1)) = 0 Then
-        fn_log = Log(args(1))
-    Else
-        Dim i As Long, j As Long
-        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
-        For i = 1 To UBound(r, 1)
-            For j = 1 To UBound(r, 2)
-                r(i, j) = Log(args(1)(i, j))
-            Next j
-        Next i
-        fn_log = r
-    End If
+    Utils_AssertArgsCount args, 1, 1
+    Utils_ForceMatrix args(1)
+    Dim i As Long, j As Long
+    Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+    For i = 1 To UBound(r, 1)
+        For j = 1 To UBound(r, 2)
+            r(i, j) = Log(args(1)(i, j))
+        Next j
+    Next i
+    Utils_Conform r
+    fn_log = r
 End Function
 
 ' X = sqrt(A)
 '
 ' X = sqrt(A) returns the square root of the elements of A.
 Private Function fn_sqrt(args As Variant) As Variant
-    If Utils_Dimensions(args(1)) = 0 Then
-        fn_sqrt = Sqr(args(1))
-    Else
-        Dim i As Long, j As Long
-        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
-        For i = 1 To UBound(r, 1)
-            For j = 1 To UBound(r, 2)
-                r(i, j) = Sqr(args(1)(i, j))
-            Next j
-        Next i
-        fn_sqrt = r
-    End If
+    Utils_AssertArgsCount args, 1, 1
+    Utils_ForceMatrix args(1)
+    Dim i As Long, j As Long
+    Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+    For i = 1 To UBound(r, 1)
+        For j = 1 To UBound(r, 2)
+            r(i, j) = Sqr(args(1)(i, j))
+        Next j
+    Next i
+    Utils_Conform r
+    fn_sqrt = r
 End Function
 
 ' r = rows(A)
@@ -1547,11 +1544,11 @@ End Function
 ' The dim input is a positive integer scalar.
 Private Function fn_std(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 2
-    Dim i As Long, x As Long, r As Variant
+    Dim i As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.StDev(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1610,8 +1607,8 @@ Private Function fn_all(args As Variant) As Variant
     Dim x As Long, i As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.And(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1631,8 +1628,8 @@ Private Function fn_any(args As Variant) As Variant
     Dim x As Long, i As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Or(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1651,11 +1648,11 @@ End Function
 Private Function fn_sum(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 2
     If IsEmpty(args(1)) Then fn_sum = 0: Exit Function
-    Dim x As Long, i As Long
+    Dim x As Long, i As Long, r As Variant
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Sum(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1677,8 +1674,8 @@ Private Function fn_prod(args As Variant) As Variant
     Dim i As Long, x As Long, r As Variant
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Product(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1693,8 +1690,8 @@ Private Function fn_mean(args As Variant) As Variant
     Dim i As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Average(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1709,8 +1706,8 @@ Private Function fn_median(args As Variant) As Variant
     Dim i As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
-    Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Median(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
@@ -1726,8 +1723,8 @@ Private Function fn_prctile(args As Variant) As Variant
     Dim i As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args, 3)
-    Dim r: ReDim r(x * Utils_Rows(args(1)) + (1 - x), (1 - x) * Utils_Cols(args(1)) + x)
-    For i = 1 To UBound(r, -x + 2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
     Next i
@@ -1750,7 +1747,7 @@ Private Function fn_max(args As Variant) As Variant
         If UBound(args) = 3 Then Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
         x = Utils_CalcDimDirection(args, 3)
         ReDim r(x * r1 + (1 - x), (1 - x) * c1 + x)
-        For i = 1 To UBound(r, -x + 2)
+        For i = 1 To UBound(r, 2 - x)
             r(x * i + (1 - x), (1 - x) * i + x) _
                 = WorksheetFunction.MAX(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
         Next i
@@ -1786,7 +1783,7 @@ Private Function fn_min(args As Variant) As Variant
         If UBound(args) = 3 Then Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
         x = Utils_CalcDimDirection(args, 3)
         ReDim r(x * r1 + (1 - x), (1 - x) * c1 + x)
-        For i = 1 To UBound(r, -x + 2)
+        For i = 1 To UBound(r, 2 - x)
             r(x * i + (1 - x), (1 - x) * i + x) _
                 = WorksheetFunction.MIN(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
         Next i
@@ -2259,6 +2256,32 @@ Private Function fn_arrayfun(args As Variant) As Variant
     Next r1
     Utils_Conform r
     fn_arrayfun = r
+End Function
+
+' B = concat(A)
+' B = concat(A,joiner)
+' B = concat(A,joiner,dim)
+'
+' B = concat(...) concatenates the elements of A along the first
+' dimension whose size does not equal 1.
+Private Function fn_concat(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 3
+    Dim i As Long, j As Long, x As Long, joiner As String
+    Utils_ForceMatrix args(1)
+    x = Utils_CalcDimDirection(args, 3)
+    If UBound(args) > 1 Then joiner = args(2)
+    Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
+    For i = 1 To UBound(args(1), 1)
+        For j = 1 To UBound(args(1), 2)
+            If (1 - x) * i + x * j = 1 Then
+                r(x * i + (1 - x), (1 - x) * j + x) = args(1)(i, j)
+            Else
+                r(x * i + (1 - x), (1 - x) * j + x) = r(x * i + (1 - x), (1 - x) * j + x) & joiner & args(1)(i, j)
+            End If
+        Next j
+    Next i
+    Utils_Conform r
+    fn_concat = r
 End Function
 
 ' v = version

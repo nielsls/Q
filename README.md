@@ -18,7 +18,7 @@ It features almost all MATLAB operators, selected standard functions and has com
 `=Q("a.*b",A1:D5,F1:I5)`   | Element wise multiplication of cells A1:D5 and F1:I5
 `=Q("a([1 3],end)",A1:D5)` | 2x1 matrix with the last entries in row 1 and 3 of cells A1:D5
 `=Q("sort(a)",A1:D5)` | sort each column of cells A1:D5
-`=Q("3+4;ans^2")` | 49<br />nice
+`=Q("3+4;ans^2")` | 49<br />Multiple expressions are separated by ";" or linebreak. Variable "ans" returns the previous result and the final result is returned by Q().
 
 ###Features
   - All standard operators: :,::,+,-,\*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'

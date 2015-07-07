@@ -14,6 +14,10 @@
 '   - =Q("a.*b",A1:D5,F1:I5)   -> element wise multiplication of cells A1:D5 and F1:I5
 '   - =Q("a([1 3],end)",A1:D5) -> get the last entries in row 1 and 3 of cells A1:D5
 '   - =Q("sort(a)",A1:D5)      -> sort each column of cells A1:D5
+'   - =Q("2+3;ans^2")          -> 25
+'                                 Multiple expressions are separated by ";" or linebreak.
+'                                 "ans" returns the last result and the very last
+'                                 result is then returned by Q().
 '
 ' Features:
 '   - All standard MATLAB operators: :,::,+,-,*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,~,'
@@ -21,6 +25,8 @@
 '     cov,prctile,std,isequal,fix,rand,randn,repmat,find,sqrt,exp,sort and many more...
 '   - Indexing via a(2,:) or a(5,3:end)
 '   - Concatenate matrices with '[]', i.e. [ a b; c d]
+'   - Multiple expressions separated by ";" or a linebreak.
+'     The variable ans contains the result of the previous expression
 '   - Excel functions: if,iferror
 '   - Prefix function calls with ! to call external VBA functions not found in Q.
 '
@@ -32,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.40"
+Private Const VERSION = "1.50"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -43,27 +49,41 @@ Private expression As String
 Private expressionIndex As Long
 Private currentToken As String
 Private previousTokenIsSpace As Boolean
-
 Private arguments As Variant
 Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
-
 Private errorMsg As String
+Private ans As Variant       ' Result of last answer when multiple expressions are used as input
 
 ' Entry point - the only public function in the library
 Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
+    On Error GoTo ErrorHandler
+    
     expression = expr
     arguments = args
     endValues = Empty
     errorMsg = ""
-
-    On Error GoTo ErrorHandler
+    ans = [NA()]
     expressionIndex = 1
     Tokens_Advance ' Find first token in input string
+    
     Dim root As Variant
-    root = Parse_Binary()
-    Utils_Assert currentToken = "", "'" & currentToken & "' not expected here."
-    'Utils_DumpTree root    'Uncomment for debugging
-    Q = eval_tree(root)
+    Do
+        Select Case currentToken
+            Case ""
+                Exit Do
+            Case ";", vbLf
+                Tokens_Advance
+            Case Else
+                root = Parse_Binary()
+                'Utils_DumpTree root    'Uncomment for debugging
+                ans = eval_tree(root)
+                Utils_Assert _
+                    currentToken = "" Or currentToken = ";" Or currentToken = vbLf, _
+                    "'" & currentToken & "' not allowed here"
+        End Select
+    Loop While True
+    
+    Q = ans
     If IsEmpty(Q) Then Q = [NA()]  'Makes sure the empty matrix is not converted to a 0
     Exit Function
     
@@ -116,6 +136,9 @@ Private Sub Tokens_Advance()
                 Tokens_AdvanceWhile NUMERICS & "-", False, True
                 Tokens_AdvanceWhile NUMERICS
             End If
+            
+        Case Asc(vbLf) 'New line
+            expressionIndex = expressionIndex + 1
                 
         Case Else
             If Not Tokens_AdvanceWhile(SINGLE_OPS, False, True) Then
@@ -145,13 +168,13 @@ Private Function Tokens_AdvanceWhile(str As String, _
     Wend
 End Function
 
-'******************
-'*** BUILD TREE ***
-'******************
+'**********************************
+'*** BUILD ABSTRACT SYNTAX TREE ***
+'**********************************
 
-' Each leaf in the parsed tree is an array with two entries
-' First entry is the name of the function that should be executed.
-' Second entry is a 1-dim array with its arguments
+' Each leaf in the parsed tree is an array with two entries.
+' First entry is a string with the name of the function that should be executed.
+' Second entry is a 1-dim array with its arguments.
 
 ' Parse chain:
 '
@@ -280,7 +303,7 @@ Private Function Parse_Atomic() As Variant
             Parse_Atomic = Parse_Binary()
             Tokens_AssertAndAdvance ")"
             
-        Case Asc("[")
+        Case Asc("[")  ' Found a matrix concatenation
             Tokens_Advance
             Parse_Atomic = Array("eval_concat", Parse_Matrix())
             Tokens_AssertAndAdvance "]"
@@ -296,6 +319,9 @@ Private Function Parse_Atomic() As Variant
         Case Asc("a") To Asc("z")
             If currentToken = "end" Then
                 Parse_Atomic = Array("eval_end", Empty)
+                Tokens_Advance
+            ElseIf currentToken = "ans" Then
+                Parse_Atomic = Array("eval_ans", Empty)
                 Tokens_Advance
             ElseIf Len(currentToken) = 1 Then ' Found an input variable
                 Parse_Atomic = Array("eval_arg", Array(Asc(currentToken) - Asc("a")))
@@ -361,6 +387,8 @@ Private Function Utils_Numel(v As Variant) As Long
     End Select
 End Function
 
+' Makes sure that a 1x1 matrix is transformed to a scalar
+' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
 Private Sub Utils_Conform(ByRef v As Variant)
     Select Case Utils_Dimensions(v)
         Case 1:
@@ -587,6 +615,10 @@ End Function
 Private Function eval_end(args As Variant) As Variant
     Utils_Assert Utils_Stack_Size(endValues) > 0, """end"" not allowed here."
     eval_end = Utils_Stack_Peek(endValues)
+End Function
+
+Private Function eval_ans(args As Variant) As Variant
+    eval_ans = ans
 End Function
 
 Private Function eval_colon(args As Variant) As Variant
@@ -1284,6 +1316,7 @@ End Function
 '
 ' r = rows(A) returns the number of rows in A.
 Private Function fn_rows(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
     fn_rows = Utils_Rows(args(1))
 End Function
 
@@ -1291,6 +1324,7 @@ End Function
 '
 ' c = cols(A) returns the number of columns in A.
 Private Function fn_cols(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
     fn_cols = Utils_Cols(args(1))
 End Function
 
@@ -1298,6 +1332,7 @@ End Function
 '
 ' n = numel(A) returns the number of elements in A.
 Private Function fn_numel(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
     fn_numel = Utils_Numel(args(1))
 End Function
 
@@ -1398,12 +1433,7 @@ Private Function fn_tick2ret(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
     Utils_ForceMatrix args(1)
     Dim x As Long: x = Utils_CalcDimDirection(args, 3)
-    Dim simple As Boolean: simple = True
-    If UBound(args) > 1 Then
-        If LCase(args(2)) = "continuous" Then
-            simple = False
-        End If
-    End If
+    Dim simple As Boolean: simple = Not Utils_IsFlagSet(args, "continuous")
     Dim r: ReDim r(UBound(args(1), 1) - (1 - x), UBound(args(1), 2) - x)
     Dim i As Long, j As Long
     For i = 1 To UBound(r, 1)
@@ -1433,6 +1463,8 @@ End Function
 ' along the first dimension (the columns); cumsum(A,2) works along the '
 ' second dimension (the rows).
 Private Function fn_cumsum(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
+    If IsEmpty(args(1)) Then fn_cumsum = 0: Exit Function
     Dim i As Long, j As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
@@ -1459,6 +1491,8 @@ End Function
 ' along the first dimension (the columns); cumprod(A,2) works along the
 ' second dimension (the rows).
 Private Function fn_cumprod(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
+    If IsEmpty(args(1)) Then fn_cumprod = 1: Exit Function
     Dim i As Long, j As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
@@ -1474,6 +1508,7 @@ End Function
 ' B = cummax(A)
 ' B = cummax(A,dim)
 Private Function fn_cummax(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
     Dim i As Long, j As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
@@ -1489,6 +1524,7 @@ End Function
 ' B = cummin(A)
 ' B = cummin(A,dim)
 Private Function fn_cummin(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
     Dim i As Long, j As Long, x As Long
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
@@ -1510,6 +1546,7 @@ End Function
 ' X = std(A,dim) sums the elements of A along dimension dim.
 ' The dim input is a positive integer scalar.
 Private Function fn_std(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
     Dim i As Long, x As Long, r As Variant
     Utils_ForceMatrix args(1)
     x = Utils_CalcDimDirection(args)
@@ -1526,6 +1563,7 @@ End Function
 '
 ' X = corr(A) returns a correlation matrix for the columns of A.
 Private Function fn_corr(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
     Dim c As Long: c = UBound(args(1), 2)
     Dim r: ReDim r(c, c)
     Dim i As Long, j As Long
@@ -1545,6 +1583,7 @@ End Function
 '
 ' X = cov(A) returns a covariance matrix for the columns of A.
 Private Function fn_cov(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
     Dim c As Long: c = UBound(args(1), 2)
     Dim r: ReDim r(c, c)
     Dim i As Long, j As Long
@@ -1566,6 +1605,7 @@ End Function
 ' In practice, all() is a natural extension of the logical AND
 ' operator.
 Private Function fn_all(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
     If IsEmpty(args(1)) Then fn_all = True: Exit Function
     Dim x As Long, i As Long
     Utils_ForceMatrix args(1)
@@ -1586,6 +1626,7 @@ End Function
 ' In practice, any() is a natural extension of the logical OR
 ' operator.
 Private Function fn_any(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
     If IsEmpty(args(1)) Then fn_any = False: Exit Function
     Dim x As Long, i As Long
     Utils_ForceMatrix args(1)
@@ -1891,6 +1932,23 @@ Private Function fn_randn(args As Variant) As Variant
     Next n
     Utils_Conform r
     fn_randn = r
+End Function
+
+' X = normcdf(A)
+Private Function fn_normcdf(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
+    If Utils_Dimensions(args(1)) = 0 Then
+        fn_normcdf = WorksheetFunction.NormSDist(args(1))
+    Else
+        Dim i As Long, j As Long
+        Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+        For i = 1 To UBound(r, 1)
+            For j = 1 To UBound(r, 2)
+                r(i, j) = WorksheetFunction.NormSDist(args(1)(i, j))
+            Next j
+        Next i
+        fn_normcdf = r
+    End If
 End Function
 
 ' X = repmat(A,n)

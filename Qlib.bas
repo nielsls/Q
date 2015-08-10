@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.50"
+Private Const VERSION = "1.51"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -1843,6 +1843,30 @@ Private Function fn_size(args As Variant) As Variant
     r(1, 1) = Utils_Rows(args(1))
     r(1, 2) = Utils_Cols(args(1))
     fn_size = r
+End Function
+
+' X = diag(A)
+'
+' X = diag(A) returns a matrix with A in the diagonal if A is a vector,
+' or a vector with the diagonal of A if A is a matrix.
+Private Function fn_diag(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
+    Dim rows As Long, cols As Long, r As Variant, i As Long
+    Utils_ForceMatrix args(1)
+    Utils_Size args(1), rows, cols
+    If Utils_IsVectorShape(rows, cols) Then
+        r = fn_repmat(Array(0, rows * cols, rows * cols))
+        For i = 1 To UBound(r, 1)
+            r(i, i) = args(1)(MIN(i, rows), MIN(i, cols))
+        Next i
+    Else
+        ReDim r(MIN(rows, cols), 1)
+        For i = 1 To UBound(r, 1)
+            r(i, 1) = args(1)(i, i)
+        Next i
+    End If
+    Utils_Conform r
+    fn_diag = r
 End Function
 
 ' X = rand

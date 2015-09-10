@@ -57,7 +57,7 @@ Private ans As Variant       ' Result of last answer when multiple expressions a
 ' Entry point - the only public function in the library
 Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     On Error GoTo ErrorHandler
-    Debug.Print "hej"
+
     expression = expr
     arguments = args
     endValues = Empty

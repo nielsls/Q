@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.52"
+Private Const VERSION = "1.53"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -1197,16 +1197,19 @@ Private Function fn_fix(args As Variant) As Variant
 End Function
 
 ' X = round(A)
+' X = round(A,k)
 '
-' X = round(A) rounds the elements of A towards the nearest integer.
+' X = round(A) rounds the elements of A.
+' X = round(A,k) rounds the elements of A with k decimal places. Default is 0
 Private Function fn_round(args As Variant) As Variant
-    Utils_AssertArgsCount args, 1, 1
+    Utils_AssertArgsCount args, 1, 2
+    Dim k As Long: If UBound(args) > 1 Then k = args(2)
     Utils_ForceMatrix args(1)
     Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
     Dim x As Long, y As Long
     For x = 1 To UBound(r, 1)
         For y = 1 To UBound(r, 2)
-            r(x, y) = WorksheetFunction.Round(args(1)(x, y), 0)
+            r(x, y) = WorksheetFunction.Round(args(1)(x, y), k)
         Next y
     Next x
     Utils_Conform r
@@ -1444,6 +1447,24 @@ Private Function fn_tick2ret(args As Variant) As Variant
     Next i
     Utils_Conform r
     fn_tick2ret = r
+End Function
+
+' X = isnum(A)
+'
+' X = isnum(A) returns a matrix with the same of A
+' indicating whether its elements are numeric.
+Private Function fn_isnum(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
+    If IsEmpty(args(1)) Then fn_isnum = False: Exit Function
+    Dim i As Long, j As Long
+    Utils_ForceMatrix args(1)
+    For i = 1 To UBound(args(1), 1)
+        For j = 1 To UBound(args(1), 2)
+            args(1)(i, j) = IsNumeric(args(1)(i, j))
+        Next j
+    Next i
+    Utils_Conform args(1)
+    fn_isnum = args(1)
 End Function
 
 ' B = cumsum(A)
@@ -2116,24 +2137,24 @@ End Function
 ' The values of B are in sorted order.
 Private Function fn_unique(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
-    Dim rows As Long, cols As Long, i As Long, count As Long, save
+    Dim rows As Long, cols As Long, i As Long, Count As Long, save
     args(1) = fn_reshape(Array(args(1), Empty, 1))
     args(1) = fn_sort(Array(args(1)))
     Utils_ForceMatrix args(1)
     Utils_Size args(1), rows, cols
     ReDim save(1 To rows - 1)
-    count = 1
+    Count = 1
     For i = 1 To UBound(save)
         save(i) = (0 <> Utils_Compare(args(1)(i, 1), args(1)(i + 1, 1)))
-        count = count - CLng(save(i))
+        Count = Count - CLng(save(i))
     Next i
-    Dim r: ReDim r(1 To count, 1)
+    Dim r: ReDim r(1 To Count, 1)
     r(1, 1) = args(1)(1, 1)
-    count = 2
+    Count = 2
     For i = 1 To UBound(save)
         If save(i) Then
-            r(count, 1) = args(1)(i + 1, 1)
-            count = count + 1
+            r(Count, 1) = args(1)(i + 1, 1)
+            Count = Count + 1
         End If
     Next i
     Utils_Conform r

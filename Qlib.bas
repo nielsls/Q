@@ -1467,6 +1467,24 @@ Private Function fn_isnum(args As Variant) As Variant
     fn_isnum = args(1)
 End Function
 
+' X = iserror(A)
+'
+' X = iserror(A) returns a matrix same size as A indicating
+' whether each entry is an error or not.
+Private Function fn_iserror(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 1
+    Utils_ForceMatrix args(1)
+    Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
+    Dim x As Long, y As Long
+    For x = 1 To UBound(r, 1)
+        For y = 1 To UBound(r, 2)
+            r(x, y) = IsError(args(1)(x, y))
+        Next y
+    Next x
+    Utils_Conform r
+    fn_iserror = r
+End Function
+
 ' B = cumsum(A)
 ' B = cumsum(A,dim)
 '
@@ -1747,7 +1765,7 @@ Private Function fn_prctile(args As Variant) As Variant
     Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
     For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
-            = WorksheetFunction.Percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
+            = WorksheetFunction.percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
     Next i
     Utils_Conform r
     fn_prctile = r

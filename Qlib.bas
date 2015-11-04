@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.53"
+Private Const VERSION = "1.54"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -509,23 +509,23 @@ End Function
 
 ' Returns the size of the return matrix in functions like zeros, rand, repmat, ...
 ' Size must be last in the args and can be either nothing, 1 scalar, 2 scalars or a vector with two scalars
-Private Function Utils_GetSizeFromArgs(args As Variant, ByRef N As Long, ByRef m As Long, Optional index As Long = 2)
+Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m As Long, Optional index As Long = 2)
     Select Case Utils_Stack_Size(args)
         Case Is < index
-            N = 1: m = 1
+            n = 1: m = 1
         Case Is = index
             Select Case Utils_Numel(args(index))
                 Case 1
-                    N = args(index)
-                    m = N
+                    n = args(index)
+                    m = n
                 Case 2
-                    N = args(index)(1, 1)
+                    n = args(index)(1, 1)
                     m = args(index)(MIN(2, UBound(args(index), 1)), MIN(2, UBound(args(index), 2)))
                 Case Else
                     Utils_Assert False, "Bad input format"
             End Select
         Case Is = index + 1
-            N = args(index)
+            n = args(index)
             m = args(index + 1)
         Case Else
             Utils_Assert False, "Bad size input"
@@ -1344,9 +1344,9 @@ End Function
 ' zeros(...) returns a matrix of zeros.
 Private Function fn_zeros(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    fn_zeros = fn_repmat(Array(0, N, m))
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    fn_zeros = fn_repmat(Array(0, n, m))
     Utils_Conform fn_zeros
 End Function
 
@@ -1358,9 +1358,9 @@ End Function
 ' ones(...) returns a matrix of ones.
 Private Function fn_ones(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    fn_ones = fn_repmat(Array(1, N, m))
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    fn_ones = fn_repmat(Array(1, n, m))
     Utils_Conform fn_ones
 End Function
 
@@ -1373,14 +1373,14 @@ End Function
 ' zeros elsewhere.
 Private Function fn_eye(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    Dim r: ReDim r(N, m)
-    For N = 1 To UBound(r, 1)
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    Dim r: ReDim r(n, m)
+    For n = 1 To UBound(r, 1)
         For m = 1 To UBound(r, 2)
-            r(N, m) = -CLng(N = m)
+            r(n, m) = -CLng(n = m)
         Next m
-    Next N
+    Next n
     Utils_Conform r
     fn_eye = r
 End Function
@@ -1393,9 +1393,9 @@ End Function
 ' true(...) returns a matrix of true's.
 Private Function fn_true(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    fn_true = fn_repmat(Array(True, N, m))
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    fn_true = fn_repmat(Array(True, n, m))
     Utils_Conform fn_true
 End Function
 
@@ -1407,9 +1407,9 @@ End Function
 ' false(...) returns a matrix of false's.
 Private Function fn_false(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    fn_false = fn_repmat(Array(False, N, m))
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    fn_false = fn_repmat(Array(False, n, m))
     Utils_Conform fn_false
 End Function
 
@@ -1917,14 +1917,14 @@ End Function
 ' uniform distribution on the open interval (0,1)
 Private Function fn_rand(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    Dim r: ReDim r(N, m)
-    For N = 1 To UBound(r, 1)
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    Dim r: ReDim r(n, m)
+    For n = 1 To UBound(r, 1)
         For m = 1 To UBound(r, 2)
-            r(N, m) = Rnd
+            r(n, m) = Rnd
         Next m
-    Next N
+    Next n
     Utils_Conform r
     fn_rand = r
 End Function
@@ -1940,8 +1940,8 @@ End Function
 ' [imin, imax].
 Private Function fn_randi(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
-    Dim imin As Long, imax As Long, N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m
+    Dim imin As Long, imax As Long, n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m
     If Utils_Numel(args(1)) = 1 Then
         imin = 1
         imax = args(1)
@@ -1949,12 +1949,12 @@ Private Function fn_randi(args As Variant) As Variant
         imin = args(1)(1, 1)
         imax = args(1)(MIN(2, UBound(args(1), 1)), MIN(2, UBound(args(1), 2)))
     End If
-    Dim r: ReDim r(N, m)
-    For N = 1 To UBound(r, 1)
+    Dim r: ReDim r(n, m)
+    For n = 1 To UBound(r, 1)
         For m = 1 To UBound(r, 2)
-            r(N, m) = CLng(Rnd * (imax - imin)) + imin
+            r(n, m) = CLng(Rnd * (imax - imin)) + imin
         Next m
-    Next N
+    Next n
     Utils_Conform r
     fn_randi = r
 End Function
@@ -1968,12 +1968,12 @@ End Function
 ' normal distribution with mean 0 and variance 1.
 Private Function fn_randn(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 2
-    Dim N As Long, m As Long
-    Utils_GetSizeFromArgs args, N, m, 1
-    Dim r: ReDim r(N, m)
+    Dim n As Long, m As Long
+    Utils_GetSizeFromArgs args, n, m, 1
+    Dim r: ReDim r(n, m)
     Dim c As Long: c = 3
     Dim p(2) As Double, tmp As Double
-    For N = 1 To UBound(r, 1)
+    For n = 1 To UBound(r, 1)
         For m = 1 To UBound(r, 2)
             If c > 2 Then
                 Do
@@ -1986,10 +1986,10 @@ Private Function fn_randn(args As Variant) As Variant
                 p(2) = p(2) * tmp
                 c = 1
             End If
-            r(N, m) = p(c)
+            r(n, m) = p(c)
             c = c + 1
         Next m
-    Next N
+    Next n
     Utils_Conform r
     fn_randn = r
 End Function
@@ -2019,21 +2019,21 @@ End Function
 ' X = repmat(A,n,m) creates a large matrix X consisting of an n-by-m tiling of A.
 ' X = repmat(A,[n m]) creates a large matrix X consisting of an n-by-m tiling of A.
 Private Function fn_repmat(args As Variant) As Variant
-    Dim r1 As Long, c1 As Long, N As Long, m As Long, i As Long, j As Long
+    Dim r1 As Long, c1 As Long, n As Long, m As Long, i As Long, j As Long
     Utils_AssertArgsCount args, 2, 3
-    Utils_GetSizeFromArgs args, N, m
+    Utils_GetSizeFromArgs args, n, m
     Utils_ForceMatrix args(1)
     Utils_Size args(1), r1, c1
-    Dim r: ReDim r(r1 * N, c1 * m)
-    For N = 0 To N - 1
+    Dim r: ReDim r(r1 * n, c1 * m)
+    For n = 0 To n - 1
         For m = 0 To m - 1
             For i = 1 To r1
                 For j = 1 To c1
-                    r(N * r1 + i, m * c1 + j) = args(1)(i, j)
+                    r(n * r1 + i, m * c1 + j) = args(1)(i, j)
                 Next j
             Next i
         Next m
-    Next N
+    Next n
     Utils_Conform r
     fn_repmat = r
 End Function
@@ -2070,14 +2070,14 @@ End Function
 Private Function fn_tostring(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     Utils_ForceMatrix args(1)
-    Dim N As Long, m As Long
-    Utils_Size args(1), N, m
-    Dim r: ReDim r(N, m)
-    For N = 1 To UBound(r, 1)
+    Dim n As Long, m As Long
+    Utils_Size args(1), n, m
+    Dim r: ReDim r(n, m)
+    For n = 1 To UBound(r, 1)
         For m = 1 To UBound(r, 2)
-            r(N, m) = args(1)(N, m) & ""
+            r(n, m) = args(1)(n, m) & ""
         Next m
-    Next N
+    Next n
     Utils_Conform r
     fn_tostring = r
 End Function
@@ -2145,8 +2145,8 @@ Private Function fn_diff(args As Variant) As Variant
     Next i
     Utils_Conform r
     fn_diff = r
-    Dim N As Long: N = Utils_GetOptionalArg(args, 2, 1)
-    If N > 1 Then fn_diff = fn_diff(Array(r, N - 1, 1 + x))
+    Dim n As Long: n = Utils_GetOptionalArg(args, 2, 1)
+    If n > 1 Then fn_diff = fn_diff(Array(r, n - 1, 1 + x))
 End Function
 
 ' B = unique(A)

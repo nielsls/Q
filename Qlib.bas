@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.54"
+Private Const VERSION = "1.60"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -309,11 +309,11 @@ Private Function Parse_Atomic() As Variant
             Tokens_AssertAndAdvance "]"
     
         Case Asc("""") ' Found a constant string
-            Parse_Atomic = Array("eval_constant", Array(Mid(currentToken, 2, Len(currentToken) - 2)))
+            Parse_Atomic = Array("eval_constant", Mid(currentToken, 2, Len(currentToken) - 2))
             Tokens_Advance
             
         Case Asc("0") To Asc("9") ' Found a numeric constant
-            Parse_Atomic = Array("eval_constant", Array(Val(currentToken)))
+            Parse_Atomic = Array("eval_constant", Val(currentToken))
             Tokens_Advance
                     
         Case Asc("a") To Asc("z")
@@ -324,7 +324,7 @@ Private Function Parse_Atomic() As Variant
                 Parse_Atomic = Array("eval_ans", Empty)
                 Tokens_Advance
             ElseIf Len(currentToken) = 1 Then ' Found an input variable
-                Parse_Atomic = Array("eval_arg", Array(Asc(currentToken) - Asc("a")))
+                Parse_Atomic = Array("eval_arg", Asc(currentToken) - Asc("a"))
                 Tokens_Advance
             Else                   ' Found a function call
                 Parse_Atomic = "fn_" & currentToken
@@ -339,7 +339,7 @@ Private Function Parse_Atomic() As Variant
             End If
             
         Case Else
-            Utils_Assert False, "Unexpected token: " & currentToken
+            Utils_Assert False, "unexpected token: " & currentToken
     End Select
 End Function
 
@@ -405,6 +405,33 @@ Private Sub Utils_Conform(ByRef v As Variant)
             
         Case 2:
             If UBound(v, 1) = 1 And UBound(v, 2) = 1 Then v = v(1, 1)
+            
+        Case Is > 2:
+            Utils_Assert False, "Dimension > 2"
+    End Select
+End Sub
+
+' Makes sure that a 1x1 matrix is transformed to a scalar
+' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
+Private Sub Utils_ConformAndAssign(ByRef v As Variant, ByRef assignTo As Variant)
+    Select Case Utils_Dimensions(v)
+        Case 1:
+            If UBound(v) = 1 Then
+                assignTo = v(1)
+            Else
+                ReDim assignTo(1, UBound(v))
+                Dim i As Long
+                For i = 1 To UBound(assignTo, 2)
+                    assignTo(1, i) = v(i)
+                Next i
+            End If
+            
+        Case 2:
+            If UBound(v, 1) = 1 And UBound(v, 2) = 1 Then
+                assignTo = v(1, 1)
+            Else
+                assignTo = v
+            End If
             
         Case Is > 2:
             Utils_Assert False, "Dimension > 2"
@@ -601,14 +628,14 @@ Private Function eval_tree(root As Variant) As Variant
 End Function
 
 Private Function eval_constant(args As Variant) As Variant
-    eval_constant = args(1)
+    eval_constant = args
 End Function
 
 Private Function eval_arg(args As Variant) As Variant
-    If args(1) > UBound(arguments) Then
-        Utils_Assert False, "Argument '" & Chr(Asc("a") + args(1)) & "' not found."
+    If args > UBound(arguments) Then
+        Utils_Assert False, "argument '" & Chr(Asc("a") + args) & "' not found."
     End If
-    eval_arg = CVar(arguments(args(1)))
+    eval_arg = CVar(arguments(args))
     Utils_Conform eval_arg
 End Function
 
@@ -706,12 +733,11 @@ Private Function eval_index(args As Variant) As Variant
             On Error GoTo 0
             
         Case Else:
-            Utils_Assert False, "Too many index arguments"
+            Utils_Assert False, "too many index arguments"
     
     End Select
 
-    Utils_Conform r
-    eval_index = r
+    Utils_ConformAndAssign r, eval_index
     Exit Function
     
 ErrorHandler:
@@ -735,14 +761,14 @@ Private Function eval_concat(args As Variant) As Variant
             If requiredRows = 0 Then
                 requiredRows = rows
             Else
-                Utils_Assert requiredRows = rows Or rows = 0, "Concatenation: Different row counts"
+                Utils_Assert requiredRows = rows Or rows = 0, "concatenation: different row counts"
             End If
             totalCols = totalCols + cols
         Next j
         If requiredCols = 0 Then
             requiredCols = totalCols
         Else
-            Utils_Assert requiredCols = totalCols Or totalCols = 0, "Concatenation: Different column counts"
+            Utils_Assert requiredCols = totalCols Or totalCols = 0, "concatenation: different column counts"
         End If
         totalRows = totalRows + requiredRows
     Next i
@@ -772,8 +798,7 @@ Private Function eval_concat(args As Variant) As Variant
         Next j
         totalRows = totalRows + rows
     Next i
-    Utils_Conform r
-    eval_concat = r
+    Utils_ConformAndAssign r, eval_concat
 
 End Function
 
@@ -813,7 +838,7 @@ Private Function op_orshortcircuit(args As Variant) As Variant
     End If
     Exit Function
 ErrorHandler:
-    Utils_Assert False, "Operator ||: Could not convert argument to boolean value"
+    Utils_Assert False, "operator ||: could not convert argument to boolean value"
 End Function
 
 ' Matches operator &&
@@ -826,7 +851,7 @@ Private Function op_andshortcircuit(args As Variant) As Variant
     End If
     Exit Function
 ErrorHandler:
-    Utils_Assert False, "Operator &&: Could not convert argument to boolean value"
+    Utils_Assert False, "operator &&: could not convert argument to boolean value"
 End Function
 
 ' Matches operator &
@@ -838,8 +863,7 @@ Private Function op_and(args As Variant) As Variant
             r(x, y) = CBool(args(1)(MIN(x, r1), MIN(y, c1))) And CBool(args(2)(MIN(x, r2), MIN(y, c2)))
         Next y
     Next x
-    Utils_Conform r
-    op_and = r
+    Utils_ConformAndAssign r, op_and
 End Function
 
 ' Matches operator |
@@ -851,8 +875,7 @@ Private Function op_or(args As Variant) As Variant
             r(x, y) = CBool(args(1)(MIN(x, r1), MIN(y, c1))) Or CBool(args(2)(MIN(x, r2), MIN(y, c2)))
         Next y
     Next x
-    Utils_Conform r
-    op_or = r
+    Utils_ConformAndAssign r, op_or
 End Function
 
 ' Matches operator <
@@ -864,8 +887,7 @@ Private Function op_lt(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) < args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_lt = r
+    Utils_ConformAndAssign r, op_lt
 End Function
 
 ' Matches operator <=
@@ -877,8 +899,7 @@ Private Function op_lte(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) <= args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_lte = r
+    Utils_ConformAndAssign r, op_lte
 End Function
 
 ' Matches operator >
@@ -890,8 +911,7 @@ Private Function op_gt(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) > args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_gt = r
+    Utils_ConformAndAssign r, op_gt
 End Function
 
 ' Matches operator >=
@@ -903,8 +923,7 @@ Private Function op_gte(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) >= args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_gte = r
+    Utils_ConformAndAssign r, op_gte
 End Function
 
 ' Matches operator ==
@@ -916,8 +935,7 @@ Private Function op_eq(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) = args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_eq = r
+    Utils_ConformAndAssign r, op_eq
 End Function
 
 ' Matches operator ~=
@@ -929,8 +947,7 @@ Private Function op_ne(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) <> args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_ne = r
+    Utils_ConformAndAssign r, op_ne
 End Function
 
 ' Matches operator ~
@@ -968,8 +985,7 @@ Private Function op_colon(args As Variant) As Variant
     For i = 0 To m
         r(1, 1 + i) = start + i * step
     Next i
-    Utils_Conform r
-    op_colon = r
+    Utils_ConformAndAssign r, op_colon
 End Function
 
 ' Matches operator +
@@ -981,8 +997,7 @@ Private Function op_plus(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) + args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_plus = r
+    Utils_ConformAndAssign r, op_plus
 End Function
 
 ' Matches unary operator +
@@ -999,8 +1014,7 @@ Private Function op_minus(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) - args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_minus = r
+    Utils_ConformAndAssign r, op_minus
 End Function
 
 ' Matches prefix unary operator -
@@ -1026,7 +1040,7 @@ End Function
 Private Function op_mtimes(args As Variant) As Variant
     Utils_CalcArgs args
     If Utils_Dimensions(args(1)) = 2 And Utils_Dimensions(args(2)) = 2 Then
-        Utils_Assert UBound(args(1), 2) = UBound(args(2), 1), "mtimes(): Matrix sizes not compatible"
+        Utils_Assert UBound(args(1), 2) = UBound(args(2), 1), "operator *: matrix sizes not compatible"
         op_mtimes = WorksheetFunction.MMult(args(1), args(2))
     Else
         Utils_ForceMatrix args(1): Utils_ForceMatrix args(2)
@@ -1053,8 +1067,7 @@ Private Function op_times(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) * args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_times = r
+    Utils_ConformAndAssign r, op_times
 End Function
 
 ' Matches operator /
@@ -1071,8 +1084,7 @@ Private Function op_mdivide(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) / args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_mdivide = r
+    Utils_ConformAndAssign r, op_mdivide
 End Function
 
 ' Matches operator ./
@@ -1084,8 +1096,7 @@ Private Function op_divide(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) / args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_divide = r
+    Utils_ConformAndAssign r, op_divide
 End Function
 
 ' Matches operator ^
@@ -1096,7 +1107,7 @@ Private Function op_mpower(args As Variant) As Variant
     If r1 = 1 And c1 = 1 And r2 = 1 And c2 = 1 Then
         op_mpower = args(1) ^ args(2)
     Else
-        Utils_Assert False, "mpower: Input must be scalars"
+        Utils_Assert False, "operator ^: input must be scalars"
     End If
 End Function
 
@@ -1109,8 +1120,7 @@ Private Function op_power(args As Variant) As Variant
             r(x, y) = args(1)(MIN(x, r1), MIN(y, c1)) ^ args(2)(MIN(x, r2), MIN(y, c2))
         Next y
     Next x
-    Utils_Conform r
-    op_power = r
+    Utils_ConformAndAssign r, op_power
 End Function
 
 ' Matches postfix unary operator '
@@ -1144,38 +1154,52 @@ Private Function fn_islogical(args As Variant) As Variant
 End Function
 
 ' I = find(X)
+' I = find(X,k)
+' I = find(X,k,"first")
+' I = find(X,k,"last")
 '
 ' I = find(A) locates all nonzero elements of array X, and returns the linear indices
 ' of those elements in vector I. If X is a row vector, then I is a row vector;
 ' otherwise, I is a column vector. If X contains no nonzero elements or is an empty array,
 ' then I is an empty array.
 Private Function fn_find(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 3
     Dim rows As Long, cols As Long
     Utils_Size args(1), rows, cols
     If rows <= 1 And cols <= 1 Then
         If CDbl(args(1)) <> 0 Then fn_find = 1
     Else
-        Dim counter As Long, i As Long, j As Long
+        Dim counter As Long, i As Long, j As Long, stepsize As Long, numElements As Long
         For i = 1 To rows
             For j = 1 To cols
                 If CDbl(args(1)(i, j)) <> 0 Then counter = counter + 1
             Next j
         Next i
-        If counter = 0 Then Exit Function
+        If UBound(args) >= 2 Then counter = MIN(counter, args(2))
+        If counter <= 0 Then Exit Function
+        stepsize = 1
+        If UBound(args) >= 3 Then
+            If args(3) = "last" Then
+                stepsize = -1
+            Else
+                Utils_Assert args(3) = "first", "find: optional 3rd argument must be ""first"" or ""last"""
+            End If
+        End If
         Dim isRowVec As Long: isRowVec = -(rows = 1)
         Dim r: ReDim r(isRowVec + (1 - isRowVec) * counter, 1 - isRowVec + isRowVec * counter)
-        counter = 0
-        For j = 1 To cols
-            For i = 1 To rows
+        If stepsize > 0 Then counter = 1
+        For j = IFF(stepsize > 0, 1, cols) To IFF(stepsize > 0, cols, 1) Step stepsize
+            For i = IFF(stepsize > 0, 1, rows) To IFF(stepsize > 0, rows, 1) Step stepsize
                 If CDbl(args(1)(i, j)) <> 0 Then
-                    counter = counter + 1
                     r(isRowVec + (1 - isRowVec) * counter, 1 - isRowVec + isRowVec * counter) _
                         = (j - 1) * rows + i
+                    counter = counter + stepsize
+                    If counter < 1 Or counter > UBound(r, 1) * UBound(r, 2) Then GoTo found_all
                 End If
             Next i
         Next j
-        Utils_Conform r
-        fn_find = r
+found_all:
+        Utils_ConformAndAssign r, fn_find
     End If
 End Function
 
@@ -1192,8 +1216,7 @@ Private Function fn_fix(args As Variant) As Variant
             r(x, y) = WorksheetFunction.RoundDown(args(1)(x, y), 0)
         Next y
     Next x
-    Utils_Conform r
-    fn_fix = r
+    Utils_ConformAndAssign r, fn_fix
 End Function
 
 ' X = round(A)
@@ -1212,8 +1235,7 @@ Private Function fn_round(args As Variant) As Variant
             r(x, y) = WorksheetFunction.Round(args(1)(x, y), k)
         Next y
     Next x
-    Utils_Conform r
-    fn_round = r
+    Utils_ConformAndAssign r, fn_round
 End Function
 
 ' X = ceil(A)
@@ -1230,8 +1252,7 @@ Private Function fn_ceil(args As Variant) As Variant
             r(x, y) = WorksheetFunction.Ceiling(args(1)(x, y), 1)
         Next y
     Next x
-    Utils_Conform r
-    fn_ceil = r
+    Utils_ConformAndAssign r, fn_ceil
 End Function
 
 ' X = floor(A)
@@ -1248,8 +1269,7 @@ Private Function fn_floor(args As Variant) As Variant
             r(x, y) = WorksheetFunction.Floor(args(1)(x, y), 1)
         Next y
     Next x
-    Utils_Conform r
-    fn_floor = r
+    Utils_ConformAndAssign r, fn_floor
 End Function
 
 Private Function fn_inv(args As Variant) As Variant
@@ -1274,8 +1294,7 @@ Private Function fn_exp(args As Variant) As Variant
             r(i, j) = Exp(args(1)(i, j))
         Next j
     Next i
-    Utils_Conform r
-    fn_exp = r
+    Utils_ConformAndAssign r, fn_exp
 End Function
 
 ' X = log(A)
@@ -1291,8 +1310,7 @@ Private Function fn_log(args As Variant) As Variant
             r(i, j) = Log(args(1)(i, j))
         Next j
     Next i
-    Utils_Conform r
-    fn_log = r
+    Utils_ConformAndAssign r, fn_log
 End Function
 
 ' X = sqrt(A)
@@ -1308,8 +1326,7 @@ Private Function fn_sqrt(args As Variant) As Variant
             r(i, j) = Sqr(args(1)(i, j))
         Next j
     Next i
-    Utils_Conform r
-    fn_sqrt = r
+    Utils_ConformAndAssign r, fn_sqrt
 End Function
 
 ' r = rows(A)
@@ -1381,8 +1398,7 @@ Private Function fn_eye(args As Variant) As Variant
             r(n, m) = -CLng(n = m)
         Next m
     Next n
-    Utils_Conform r
-    fn_eye = r
+    Utils_ConformAndAssign r, fn_eye
 End Function
 
 ' X = true
@@ -1422,8 +1438,7 @@ Private Function fn_xor(args As Variant) As Variant
             r(x, y) = CBool(args(1)(MIN(x, r1), MIN(y, c1))) Xor CBool(args(2)(MIN(x, r2), MIN(y, c2)))
         Next y
     Next x
-    Utils_Conform r
-    fn_xor = r
+    Utils_ConformAndAssign r, fn_xor
 End Function
 
 ' X = tick2ret(A)
@@ -1445,8 +1460,7 @@ Private Function fn_tick2ret(args As Variant) As Variant
             End If
         Next j
     Next i
-    Utils_Conform r
-    fn_tick2ret = r
+    Utils_ConformAndAssign r, fn_tick2ret
 End Function
 
 ' X = isnum(A)
@@ -1463,8 +1477,7 @@ Private Function fn_isnum(args As Variant) As Variant
             args(1)(i, j) = IsNumeric(args(1)(i, j))
         Next j
     Next i
-    Utils_Conform args(1)
-    fn_isnum = args(1)
+    Utils_ConformAndAssign args(1), fn_isnum
 End Function
 
 ' X = iserror(A)
@@ -1481,8 +1494,7 @@ Private Function fn_iserror(args As Variant) As Variant
             r(x, y) = IsError(args(1)(x, y))
         Next y
     Next x
-    Utils_Conform r
-    fn_iserror = r
+    Utils_ConformAndAssign r, fn_iserror
 End Function
 
 ' B = cumsum(A)
@@ -1509,8 +1521,7 @@ Private Function fn_cumsum(args As Variant) As Variant
             args(1)(i, j) = args(1)(i, j) + args(1)(i - (1 - x), j - x)
         Next j
     Next i
-    Utils_Conform args(1)
-    fn_cumsum = args(1)
+    Utils_ConformAndAssign args(1), fn_cumsum
 End Function
 
 ' B = cumprod(A)
@@ -1537,8 +1548,7 @@ Private Function fn_cumprod(args As Variant) As Variant
             args(1)(i, j) = args(1)(i, j) * args(1)(i - (1 - x), j - x)
         Next j
     Next i
-    Utils_Conform args(1)
-    fn_cumprod = args(1)
+    Utils_ConformAndAssign args(1), fn_cumprod
 End Function
 
 ' B = cummax(A)
@@ -1553,8 +1563,7 @@ Private Function fn_cummax(args As Variant) As Variant
             args(1)(i, j) = MAX(args(1)(i, j), args(1)(i - (1 - x), j - x))
         Next j
     Next i
-    Utils_Conform args(1)
-    fn_cummax = args(1)
+    Utils_ConformAndAssign args(1), fn_cummax
 End Function
 
 ' B = cummin(A)
@@ -1569,8 +1578,7 @@ Private Function fn_cummin(args As Variant) As Variant
             args(1)(i, j) = MIN(args(1)(i, j), args(1)(i - (1 - x), j - x))
         Next j
     Next i
-    Utils_Conform args(1)
-    fn_cummin = args(1)
+    Utils_ConformAndAssign args(1), fn_cummin
 End Function
 
 ' X = std(A)
@@ -1591,8 +1599,7 @@ Private Function fn_std(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.StDev(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_std = r
+    Utils_ConformAndAssign r, fn_std
 End Function
 
 ' X = corr(A)
@@ -1612,7 +1619,7 @@ Private Function fn_corr(args As Variant) As Variant
             r(j, i) = r(i, j)
         Next j
     Next i
-    fn_corr = r
+    Utils_ConformAndAssign r, fn_corr
 End Function
 
 ' X = cov(A)
@@ -1631,7 +1638,7 @@ Private Function fn_cov(args As Variant) As Variant
             r(j, i) = r(i, j)
         Next j
     Next i
-    fn_cov = r
+    Utils_ConformAndAssign r, fn_cov
 End Function
 
 ' X = all(A)
@@ -1651,8 +1658,7 @@ Private Function fn_all(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.And(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_all = r
+    Utils_ConformAndAssign r, fn_all
 End Function
 
 ' X = any(A)
@@ -1672,8 +1678,7 @@ Private Function fn_any(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Or(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_any = r
+    Utils_ConformAndAssign r, fn_any
 End Function
 
 ' X = sum(A)
@@ -1695,8 +1700,7 @@ Private Function fn_sum(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Sum(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_sum = r
+    Utils_ConformAndAssign r, fn_sum
 End Function
 
 ' X = prod(A)
@@ -1718,8 +1722,7 @@ Private Function fn_prod(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Product(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_prod = r
+    Utils_ConformAndAssign r, fn_prod
 End Function
 
 ' X = mean(A)
@@ -1734,8 +1737,7 @@ Private Function fn_mean(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Average(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_mean = r
+    Utils_ConformAndAssign r, fn_mean
 End Function
 
 ' X = median(A)
@@ -1750,8 +1752,7 @@ Private Function fn_median(args As Variant) As Variant
         r(x * i + (1 - x), (1 - x) * i + x) _
             = WorksheetFunction.Median(WorksheetFunction.index(args(1), x * i, (1 - x) * i))
     Next i
-    Utils_Conform r
-    fn_median = r
+    Utils_ConformAndAssign r, fn_median
 End Function
 
 ' X = prctile(A)
@@ -1765,10 +1766,9 @@ Private Function fn_prctile(args As Variant) As Variant
     Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
     For i = 1 To UBound(r, 2 - x)
         r(x * i + (1 - x), (1 - x) * i + x) _
-            = WorksheetFunction.percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
+            = WorksheetFunction.Percentile(WorksheetFunction.index(args(1), x * i, (1 - x) * i), args(2))
     Next i
-    Utils_Conform r
-    fn_prctile = r
+    Utils_ConformAndAssign r, fn_prctile
 End Function
 
 ' M = max(A)
@@ -1803,8 +1803,7 @@ Private Function fn_max(args As Variant) As Variant
         Next x
     End If
     
-    Utils_Conform r
-    fn_max = r
+    Utils_ConformAndAssign r, fn_max
 End Function
 
 ' M = min(A)
@@ -1819,7 +1818,7 @@ Private Function fn_min(args As Variant) As Variant
     Utils_Size args(1), r1, c1
     
     If UBound(args) = 1 Or UBound(args) = 3 Then
-        If UBound(args) = 3 Then Utils_Assert IsEmpty(args(2)), "2nd argument must be empty matrix, []."
+        If UBound(args) = 3 Then Utils_Assert IsEmpty(args(2)), "min: 2nd argument must be the empty matrix, []."
         x = Utils_CalcDimDirection(args, 3)
         ReDim r(x * r1 + (1 - x), (1 - x) * c1 + x)
         For i = 1 To UBound(r, 2 - x)
@@ -1830,7 +1829,7 @@ Private Function fn_min(args As Variant) As Variant
         Utils_ForceMatrix args(2)
         Dim r2 As Long, c2 As Long
         Utils_Size args(2), r2, c2
-        Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2), "min(): Wrong dimensions."
+        Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2), "min: bad dimensions."
         ReDim r(MAX(r1, r2), MAX(c1, c2))
         For x = 1 To UBound(r, 1)
             For y = 1 To UBound(r, 2)
@@ -1839,8 +1838,7 @@ Private Function fn_min(args As Variant) As Variant
         Next x
     End If
     
-    Utils_Conform r
-    fn_min = r
+    Utils_ConformAndAssign r, fn_min
 End Function
 
 ' b = isequal(A,B)
@@ -1904,8 +1902,7 @@ Private Function fn_diag(args As Variant) As Variant
             r(i, 1) = args(1)(i, i)
         Next i
     End If
-    Utils_Conform r
-    fn_diag = r
+    Utils_ConformAndAssign r, fn_diag
 End Function
 
 ' X = rand
@@ -1925,8 +1922,7 @@ Private Function fn_rand(args As Variant) As Variant
             r(n, m) = Rnd
         Next m
     Next n
-    Utils_Conform r
-    fn_rand = r
+    Utils_ConformAndAssign r, fn_rand
 End Function
 
 ' X = randi(imax)
@@ -1955,8 +1951,7 @@ Private Function fn_randi(args As Variant) As Variant
             r(n, m) = CLng(Rnd * (imax - imin)) + imin
         Next m
     Next n
-    Utils_Conform r
-    fn_randi = r
+    Utils_ConformAndAssign r, fn_randi
 End Function
 
 ' X = randn
@@ -1990,8 +1985,7 @@ Private Function fn_randn(args As Variant) As Variant
             c = c + 1
         Next m
     Next n
-    Utils_Conform r
-    fn_randn = r
+    Utils_ConformAndAssign r, fn_randn
 End Function
 
 ' X = normcdf(A)
@@ -2034,8 +2028,7 @@ Private Function fn_repmat(args As Variant) As Variant
             Next i
         Next m
     Next n
-    Utils_Conform r
-    fn_repmat = r
+    Utils_ConformAndAssign r, fn_repmat
 End Function
 
 ' B = reshape(A,n,m)
@@ -2060,8 +2053,7 @@ Private Function fn_reshape(args As Variant) As Variant
         Utils_Ind2Sub CLng(args(2)), idx, r_i, r_j
         r(r_i, r_j) = args(1)(arg_i, arg_j)
     Next idx
-    Utils_Conform r
-    fn_reshape = r
+    Utils_ConformAndAssign r, fn_reshape
 End Function
 
 ' X = tostring(A)
@@ -2078,8 +2070,7 @@ Private Function fn_tostring(args As Variant) As Variant
             r(n, m) = args(1)(n, m) & ""
         Next m
     Next n
-    Utils_Conform r
-    fn_tostring = r
+    Utils_ConformAndAssign r, fn_tostring
 End Function
 
 ' X = if(a,B,C)
@@ -2123,8 +2114,7 @@ Private Function fn_count(args As Variant) As Variant
                 = r(i * x + (1 - x), j * (1 - x) + x) - CBool(args(1)(i, j))
         Next j
     Next i
-    Utils_Conform r
-    fn_count = r
+    Utils_ConformAndAssign r, fn_count
 End Function
 
 ' Y = diff(X)
@@ -2143,8 +2133,7 @@ Private Function fn_diff(args As Variant) As Variant
             r(i - (1 - x), j - x) = args(1)(i, j) - args(1)(i - (1 - x), j - x)
         Next j
     Next i
-    Utils_Conform r
-    fn_diff = r
+    Utils_ConformAndAssign r, fn_diff
     Dim n As Long: n = Utils_GetOptionalArg(args, 2, 1)
     If n > 1 Then fn_diff = fn_diff(Array(r, n - 1, 1 + x))
 End Function
@@ -2155,28 +2144,27 @@ End Function
 ' The values of B are in sorted order.
 Private Function fn_unique(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
-    Dim rows As Long, cols As Long, i As Long, Count As Long, save
+    Dim rows As Long, cols As Long, i As Long, counter As Long, save
     args(1) = fn_reshape(Array(args(1), Empty, 1))
     args(1) = fn_sort(Array(args(1)))
     Utils_ForceMatrix args(1)
     Utils_Size args(1), rows, cols
     ReDim save(1 To rows - 1)
-    Count = 1
+    counter = 1
     For i = 1 To UBound(save)
         save(i) = (0 <> Utils_Compare(args(1)(i, 1), args(1)(i + 1, 1)))
-        Count = Count - CLng(save(i))
+        counter = counter - CLng(save(i))
     Next i
-    Dim r: ReDim r(1 To Count, 1)
+    Dim r: ReDim r(1 To counter, 1)
     r(1, 1) = args(1)(1, 1)
-    Count = 2
+    counter = 2
     For i = 1 To UBound(save)
         If save(i) Then
-            r(Count, 1) = args(1)(i + 1, 1)
-            Count = Count + 1
+            r(counter, 1) = args(1)(i + 1, 1)
+            counter = counter + 1
         End If
     Next i
-    Utils_Conform r
-    fn_unique = r
+    Utils_ConformAndAssign r, fn_unique
 End Function
 
 ' B = sort(A)
@@ -2228,7 +2216,7 @@ Private Function fn_sort(args As Variant) As Variant
     If returnIndices Then
         fn_sort = indices
     Else
-        Dim r:  ReDim r(1 To rows, 1 To cols)
+        Dim r: ReDim r(1 To rows, 1 To cols)
         For i = 1 To rows
             For j = 1 To cols
                 r(i, j) = args(1)(indices(i, j), j)
@@ -2297,7 +2285,7 @@ End Function
 ' A1 to An must all be scalars or matrices with the same size
 Private Function fn_arrayfun(args As Variant) As Variant
     Utils_AssertArgsCount args, 2, 100
-    Utils_Assert TypeName(args(1)) = "String", "apply(): 1st argument must be an Excel function name."
+    Utils_Assert TypeName(args(1)) = "String", "apply: 1st argument must be an Excel function name."
     Dim i As Long, r1 As Long, c1 As Long, r2 As Long, c2 As Long
     r1 = -1: c1 = -1
     For i = 2 To Utils_Stack_Size(args)
@@ -2317,8 +2305,7 @@ Private Function fn_arrayfun(args As Variant) As Variant
             r(r1, c1) = Evaluate(args(1) & "(" & Join(v, ",") & ")")
         Next c1
     Next r1
-    Utils_Conform r
-    fn_arrayfun = r
+    Utils_ConformAndAssign r, fn_arrayfun
 End Function
 
 ' B = concat(A)
@@ -2343,8 +2330,7 @@ Private Function fn_concat(args As Variant) As Variant
             End If
         Next j
     Next i
-    Utils_Conform r
-    fn_concat = r
+    Utils_ConformAndAssign r, fn_concat
 End Function
 
 ' v = version

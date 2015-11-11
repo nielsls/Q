@@ -84,9 +84,7 @@ Sub TestAll()
     Next arrItem
 
     Debug.Assert Q("isequal(a,b)", Q("sort(a)", a), Q("sort(a, ""descend"")(end:-1:1,:)", a))
-
-    Debug.Assert Q("isequal(a,b)", Q("7''"), 7)                                            ' Arithmetic operators
-    Debug.Assert Q("isequal(a,b)", Q("((7*a)./(a*7))(1,1)", a), 1)
+    Debug.Assert Q("isequal(a,b)", Q("((7*a)./(a*7))(1,1)", a), 1)   ' Arithmetic operators
     Debug.Assert Q("isequal(a,b)", Q("((7+a)-(a+7))(1,1)", a), 0)
     Debug.Assert Q("isequal(a,b)", Q("a*eye(5)", a), a)
     Debug.Assert Q("isequal(a,b)", Q("eye(3)*a", a), a)
@@ -101,6 +99,5 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("islogical(17)"), False)
     Debug.Assert Q("isequal(a,b)", Q("islogical(a>10)", a), True)
     Debug.Assert Q("isequal(a,b)", Q("islogical(a)", a), False)
-    
 
 End Sub

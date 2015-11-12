@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.60"
+Private Const VERSION = "1.61"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -64,7 +64,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     errorMsg = ""
     ans = [NA()]
     expressionIndex = 1
-    Tokens_Advance ' Find first token in input string
+    Tokens_Next ' Find first token in input string
     
     Dim root As Variant
     Do
@@ -72,7 +72,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
             Case ""
                 Exit Do
             Case ";", vbLf
-                Tokens_Advance
+                Tokens_Next
             Case Else
                 root = Parse_Binary()
                 'Utils_DumpTree root    'Uncomment for debugging
@@ -111,8 +111,8 @@ End Function
 '*** TOKEN CONTROL ***
 '*********************
 
-Private Sub Tokens_Advance()
-    previousTokenIsSpace = Tokens_AdvanceWhile(" ")
+Private Sub Tokens_Next()
+    previousTokenIsSpace = Tokens_MoveCharPointer(" ")
     If expressionIndex > Len(expression) Then currentToken = "": Exit Sub
     
     Dim startIndex As Long: startIndex = expressionIndex
@@ -120,29 +120,29 @@ Private Sub Tokens_Advance()
     
         Case Asc("""")
             expressionIndex = expressionIndex + 1
-            Tokens_AdvanceWhile """", True
+            Tokens_MoveCharPointer """", True
             Utils_Assert expressionIndex <= Len(expression), "Unfinished string literal"
             expressionIndex = expressionIndex + 1
             
         Case Asc("a") To Asc("z")
-            Tokens_AdvanceWhile NUMERICS & ALPHAS & "_"
+            Tokens_MoveCharPointer NUMERICS & ALPHAS & "_"
             
         Case Asc("0") To Asc("9")
-            Tokens_AdvanceWhile NUMERICS
-            If Tokens_AdvanceWhile(".", False, True) Then
-                Tokens_AdvanceWhile NUMERICS
+            Tokens_MoveCharPointer NUMERICS
+            If Tokens_MoveCharPointer(".", False, True) Then
+                Tokens_MoveCharPointer NUMERICS
             End If
-            If Tokens_AdvanceWhile("eE", False, True) Then
-                Tokens_AdvanceWhile NUMERICS & "-", False, True
-                Tokens_AdvanceWhile NUMERICS
+            If Tokens_MoveCharPointer("eE", False, True) Then
+                Tokens_MoveCharPointer NUMERICS & "-", False, True
+                Tokens_MoveCharPointer NUMERICS
             End If
             
         Case Asc(vbLf) 'New line
             expressionIndex = expressionIndex + 1
                 
         Case Else
-            If Not Tokens_AdvanceWhile(SINGLE_OPS, False, True) Then
-                Tokens_AdvanceWhile COMBO_OPS
+            If Not Tokens_MoveCharPointer(SINGLE_OPS, False, True) Then
+                Tokens_MoveCharPointer COMBO_OPS
             End If
          
     End Select
@@ -152,18 +152,18 @@ Private Sub Tokens_Advance()
         "Illegal char: " & Mid(expression, expressionIndex, 1)
 End Sub
 
-Private Sub Tokens_AssertAndAdvance(token As String)
-    Utils_Assert token = currentToken, "Missing token: " & token
-    Tokens_Advance
+Private Sub Tokens_AssertAndNext(token As String)
+    Utils_Assert token = currentToken, "missing token: " & token
+    Tokens_Next
 End Sub
 
-Private Function Tokens_AdvanceWhile(str As String, _
+Private Function Tokens_MoveCharPointer(str As String, _
     Optional stopAtStr As Boolean = False, _
     Optional singleCharOnly As Boolean = False) As Boolean
     While expressionIndex <= Len(expression) _
         And stopAtStr <> (InStr(str, Mid(expression, expressionIndex, 1)) > 0)
         expressionIndex = expressionIndex + 1
-        Tokens_AdvanceWhile = True
+        Tokens_MoveCharPointer = True
         If singleCharOnly Then Exit Function
     Wend
 End Function
@@ -188,58 +188,59 @@ End Function
 '           List
 
 'Returns true if token is a suitable operator
-Private Function Parse_FindOp(token As String, opType As String, ByRef op As Variant) As Boolean
-    op = Null
-    
-    Select Case opType
-        Case "binary"
-            Select Case token
-                'op = Array( <function name>, <precedence level>, <left associative> )
-                Case "||": op = Array("orshortcircuit", 1, True)
-                Case "&&": op = Array("andshortcircuit", 2, True)
-                Case "|": op = Array("or", 3, True)
-                Case "&": op = Array("and", 4, True)
-                Case "<": op = Array("lt", 5, True)
-                Case "<=": op = Array("lte", 5, True)
-                Case ">": op = Array("gt", 5, True)
-                Case ">=": op = Array("gte", 5, True)
-                Case "==": op = Array("eq", 5, True)
-                Case "=": op = Array("eq", 5, True)
-                Case "~=": op = Array("ne", 5, True)
-                Case "<>": op = Array("ne", 5, True)
-                Case ":": op = Array("colon", 6, False)
-                Case "+": op = Array("plus", 7, True)
-                Case "-": op = Array("minus", 7, True)
-                Case "*": op = Array("mtimes", 8, True)
-                Case ".*": op = Array("times", 8, True)
-                Case "/": op = Array("mdivide", 8, True)
-                Case "./": op = Array("divide", 8, True)
-                Case "^": op = Array("mpower", 9, True)
-                Case ".^": op = Array("power", 9, True)
-            End Select
-            
-        Case "unaryprefix"
-            Select Case token
-                Case "+": op = "uplus"
-                Case "-": op = "uminus"
-                Case "~": op = "negate"
-                Case "#": op = "numel"
-                Case "!": op = "extern"
-            End Select
-            
-        Case "unarypostfix"
-            Select Case token
-                Case "'": op = "transpose"
-            End Select
+Private Function Parse_FindBinaryOp(token As String, ByRef op As Variant) As Boolean
+    Parse_FindBinaryOp = True
+    Select Case token
+        'op = Array( <function name>, <precedence level>, <left associative> )
+        Case "||": op = Array("orshortcircuit", 1, True)
+        Case "&&": op = Array("andshortcircuit", 2, True)
+        Case "|": op = Array("or", 3, True)
+        Case "&": op = Array("and", 4, True)
+        Case "<": op = Array("lt", 5, True)
+        Case "<=": op = Array("lte", 5, True)
+        Case ">": op = Array("gt", 5, True)
+        Case ">=": op = Array("gte", 5, True)
+        Case "==": op = Array("eq", 5, True)
+        Case "=": op = Array("eq", 5, True)
+        Case "~=": op = Array("ne", 5, True)
+        Case "<>": op = Array("ne", 5, True)
+        Case ":": op = Array("colon", 6, False)
+        Case "+": op = Array("plus", 7, True)
+        Case "-": op = Array("minus", 7, True)
+        Case "*": op = Array("mtimes", 8, True)
+        Case ".*": op = Array("times", 8, True)
+        Case "/": op = Array("mdivide", 8, True)
+        Case "./": op = Array("divide", 8, True)
+        Case "^": op = Array("mpower", 9, True)
+        Case ".^": op = Array("power", 9, True)
+        Case Else: Parse_FindBinaryOp = False
     End Select
-    
-    Parse_FindOp = Not IsNull(op)
+End Function
+
+Private Function Parse_FindUnaryPrefixOp(token As String, ByRef op As Variant) As Boolean
+    Parse_FindUnaryPrefixOp = True
+    Select Case token
+        Case "+": op = "uplus"
+        Case "-": op = "uminus"
+        Case "~": op = "negate"
+        Case "#": op = "numel"
+        Case "!": op = "extern"
+        Case Else: Parse_FindUnaryPrefixOp = False
+    End Select
+End Function
+
+Private Function Parse_FindUnaryPostfixOp(token As String, ByRef op As Variant) As Boolean
+    Parse_FindUnaryPostfixOp = True
+    Select Case token
+        Case "'": op = "transpose"
+        Case Else: Parse_FindUnaryPostfixOp = False
+    End Select
 End Function
 
 Private Function Parse_Matrix() As Variant
     While currentToken <> "]"
         Utils_Stack_Push Parse_List(True), Parse_Matrix
-        If currentToken = ";" Then Tokens_Advance
+        If currentToken = ";" Then Tokens_Next
         Utils_Assert currentToken <> "", "Missing ']'"
     Wend
 End Function
@@ -248,7 +249,7 @@ Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Var
     Do While InStr(";)]", currentToken) = 0
         Utils_Stack_Push Parse_Binary(), Parse_List
         If currentToken = "," Then
-            Tokens_Advance
+            Tokens_Next
         ElseIf Not (previousTokenIsSpace And isSpaceSeparator) Then
             Exit Do
         End If
@@ -257,17 +258,17 @@ End Function
 
 Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
     Parse_Binary = Parse_Prefix()
-    Dim op: Do While Parse_FindOp(currentToken, "binary", op)
+    Dim op: Do While Parse_FindBinaryOp(currentToken, op)
         If op(2) + CLng(op(3)) < lastPrec Then Exit Do
-        Tokens_Advance
+        Tokens_Next
         Parse_Binary = Array("op_" & op(1), Array(Parse_Binary, Parse_Binary(CLng(op(2)))))
     Loop
 End Function
 
 Private Function Parse_Prefix() As Variant
     Dim op
-    If Parse_FindOp(currentToken, "unaryprefix", op) Then
-        Tokens_Advance
+    If Parse_FindUnaryPrefixOp(currentToken, op) Then
+        Tokens_Next
         Parse_Prefix = Array("op_" & op, Array(Parse_Prefix()))
     Else
         Parse_Prefix = Parse_Postfix()
@@ -277,13 +278,13 @@ End Function
 Private Function Parse_Postfix() As Variant
     Parse_Postfix = Parse_Atomic
     Dim op: Do
-        If Parse_FindOp(currentToken, "unarypostfix", op) Then
+        If Parse_FindUnaryPostfixOp(currentToken, op) Then
             Parse_Postfix = Array("op_" & op, Array(Parse_Postfix))
-            Tokens_Advance
+            Tokens_Next
         ElseIf currentToken = "(" Then
-            Tokens_Advance
+            Tokens_Next
             Parse_Postfix = Array("eval_index", Array(Parse_Postfix, Parse_List()))
-            Tokens_AssertAndAdvance ")"
+            Tokens_AssertAndNext ")"
         Else
             Exit Do
         End If
@@ -291,48 +292,48 @@ Private Function Parse_Postfix() As Variant
 End Function
 
 Private Function Parse_Atomic() As Variant
-    Utils_Assert currentToken <> "", "Missing argument"
+    Utils_Assert currentToken <> "", "missing argument"
     Select Case Asc(currentToken) ' Filter on first char of token
             
         Case Asc(":")
             Parse_Atomic = Array("eval_colon", Empty)
-            Tokens_Advance
+            Tokens_Next
             
         Case Asc("(")
-            Tokens_Advance
+            Tokens_Next
             Parse_Atomic = Parse_Binary()
-            Tokens_AssertAndAdvance ")"
+            Tokens_AssertAndNext ")"
             
         Case Asc("[")  ' Found a matrix concatenation
-            Tokens_Advance
+            Tokens_Next
             Parse_Atomic = Array("eval_concat", Parse_Matrix())
-            Tokens_AssertAndAdvance "]"
+            Tokens_AssertAndNext "]"
     
         Case Asc("""") ' Found a constant string
             Parse_Atomic = Array("eval_constant", Mid(currentToken, 2, Len(currentToken) - 2))
-            Tokens_Advance
+            Tokens_Next
             
         Case Asc("0") To Asc("9") ' Found a numeric constant
             Parse_Atomic = Array("eval_constant", Val(currentToken))
-            Tokens_Advance
+            Tokens_Next
                     
         Case Asc("a") To Asc("z")
             If currentToken = "end" Then
                 Parse_Atomic = Array("eval_end", Empty)
-                Tokens_Advance
+                Tokens_Next
             ElseIf currentToken = "ans" Then
                 Parse_Atomic = Array("eval_ans", Empty)
-                Tokens_Advance
+                Tokens_Next
             ElseIf Len(currentToken) = 1 Then ' Found an input variable
                 Parse_Atomic = Array("eval_arg", Asc(currentToken) - Asc("a"))
-                Tokens_Advance
+                Tokens_Next
             Else                   ' Found a function call
                 Parse_Atomic = "fn_" & currentToken
-                Tokens_Advance
+                Tokens_Next
                 If currentToken = "(" Then
-                    Tokens_AssertAndAdvance "("
+                    Tokens_AssertAndNext "("
                     Parse_Atomic = Array(Parse_Atomic, Parse_List())
-                    Tokens_AssertAndAdvance ")"
+                    Tokens_AssertAndNext ")"
                 Else
                     Parse_Atomic = Array(Parse_Atomic, Empty)
                 End If
@@ -383,9 +384,34 @@ Private Function Utils_Numel(v As Variant) As Long
         Case 0: Utils_Numel = IFF(IsEmpty(v), 0, 1)
         Case 1: Utils_Numel = UBound(v)
         Case 2: Utils_Numel = UBound(v, 1) * UBound(v, 2)
-        Case Else: Utils_Assert False, "Dimension > 2"
+        Case Else: Utils_Assert False, "dimension > 2"
     End Select
 End Function
+
+Private Function Utils_Rows(ByRef v As Variant) As Long
+    Dim c As Long
+    Utils_Size v, Utils_Rows, c
+End Function
+
+Private Function Utils_Cols(ByRef v As Variant) As Long
+    Dim r As Long
+    Utils_Size v, r, Utils_Cols
+End Function
+
+Private Sub Utils_Size(v As Variant, ByRef r As Long, ByRef c As Long)
+    r = 0: c = 0
+    Select Case Utils_Dimensions(v)
+        Case 0: If Not IsEmpty(v) Then r = 1: c = 1
+        Case 1: r = UBound(v): c = 1
+        Case 2: r = UBound(v, 1): c = UBound(v, 2)
+        Case Else: Utils_Assert False, "dimension > 2"
+    End Select
+End Sub
+
+Private Sub Utils_Ind2Sub(rows As Long, k As Long, ByRef i As Long, ByRef j As Long)
+    j = (k - 1) \ rows + 1
+    i = k - rows * (j - 1)
+End Sub
 
 ' Makes sure that a 1x1 matrix is transformed to a scalar
 ' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
@@ -402,79 +428,44 @@ Private Sub Utils_Conform(ByRef v As Variant)
                 Next i
                 v = r
             End If
-            
         Case 2:
             If UBound(v, 1) = 1 And UBound(v, 2) = 1 Then v = v(1, 1)
-            
         Case Is > 2:
-            Utils_Assert False, "Dimension > 2"
+            Utils_Assert False, "dimension > 2"
     End Select
 End Sub
 
 ' Makes sure that a 1x1 matrix is transformed to a scalar
 ' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
-Private Sub Utils_ConformAndAssign(ByRef v As Variant, ByRef assignTo As Variant)
+Private Sub Utils_ConformAndAssign(ByRef v As Variant, ByRef assignToMe As Variant)
     Select Case Utils_Dimensions(v)
         Case 1:
             If UBound(v) = 1 Then
-                assignTo = v(1)
+                assignToMe = v(1)
             Else
-                ReDim assignTo(1, UBound(v))
+                ReDim assignToMe(1, UBound(v))
                 Dim i As Long
-                For i = 1 To UBound(assignTo, 2)
-                    assignTo(1, i) = v(i)
+                For i = 1 To UBound(assignToMe, 2)
+                    assignToMe(1, i) = v(i)
                 Next i
             End If
-            
         Case 2:
             If UBound(v, 1) = 1 And UBound(v, 2) = 1 Then
-                assignTo = v(1, 1)
+                assignToMe = v(1, 1)
             Else
-                assignTo = v
+                assignToMe = v
             End If
-            
         Case Is > 2:
-            Utils_Assert False, "Dimension > 2"
+            Utils_Assert False, "dimension > 2"
     End Select
 End Sub
 
-Private Sub Utils_ForceMatrix(v As Variant)
+Private Sub Utils_ForceMatrix(ByRef v As Variant)
     If Utils_Dimensions(v) = 0 Then
         Dim r: ReDim r(1, 1)
         r(1, 1) = v
         v = r
     End If
-End Sub
-
-Private Function Utils_Rows(ByRef v As Variant) As Long
-    Select Case Utils_Numel(v)
-        Case 0: Utils_Rows = 0
-        Case 1: Utils_Rows = 1
-        Case Else: Utils_Rows = UBound(v, 1)
-    End Select
-End Function
-
-Private Function Utils_Cols(ByRef v As Variant) As Long
-    Select Case Utils_Numel(v)
-        Case 0: Utils_Cols = 0
-        Case 1: Utils_Cols = 1
-        Case Else: Utils_Cols = UBound(v, 2)
-    End Select
-End Function
-
-Private Sub Utils_Size(v As Variant, ByRef r As Long, ByRef c As Long)
-    r = 0: c = 0
-    Select Case Utils_Dimensions(v)
-        Case 0: If Not IsEmpty(v) Then r = 1: c = 1
-        Case 1: r = UBound(v): c = 1
-        Case 2: r = UBound(v, 1): c = UBound(v, 2)
-        Case Else: Utils_Assert False, "Dimension > 2"
-    End Select
-End Sub
-
-Private Sub Utils_Ind2Sub(rows As Long, k As Long, ByRef i As Long, ByRef j As Long)
-    j = (k - 1) \ rows + 1
-    i = k - rows * (j - 1)
 End Sub
 
 Private Sub Utils_Stack_Push(item As Variant, stack As Variant)
@@ -504,8 +495,7 @@ End Function
 
 ' Transforms all entries in the vector from trees to values
 Private Sub Utils_CalcArgs(args As Variant)
-    Dim i As Long
-    For i = 1 To Utils_Stack_Size(args)
+    Dim i As Long: For i = 1 To Utils_Stack_Size(args)
         args(i) = eval_tree(args(i))
     Next i
 End Sub
@@ -549,13 +539,13 @@ Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m
                     n = args(index)(1, 1)
                     m = args(index)(MIN(2, UBound(args(index), 1)), MIN(2, UBound(args(index), 2)))
                 Case Else
-                    Utils_Assert False, "Bad input format"
+                    Utils_Assert False, "bad size input"
             End Select
         Case Is = index + 1
             n = args(index)
             m = args(index + 1)
         Case Else
-            Utils_Assert False, "Bad size input"
+            Utils_Assert False, "bad size input"
     End Select
 End Function
 
@@ -576,7 +566,7 @@ Private Function Utils_SetupBinaryOperation(args As Variant, r As Variant, _
     Utils_ForceMatrix args(1): Utils_Size args(1), r1, c1
     Utils_ForceMatrix args(2): Utils_Size args(2), r2, c2
     Utils_Assert (r1 = 1 And c1 = 1) Or (r2 = 1 And c2 = 1) Or (r1 = r2 And c1 = c2), _
-        "Dimension mismatch"
+        "dimension mismatch"
     ReDim r(MAX(r1, r2), MAX(c1, c2))
 End Function
 
@@ -584,12 +574,12 @@ End Function
 ' has been called with the right number of arguments
 Private Sub Utils_AssertArgsCount(args As Variant, lb As Long, ub As Long)
     Dim size As Long: size = Utils_Stack_Size(args)
-    Utils_Assert size >= lb, "Too few arguments"
-    Utils_Assert size <= ub, "Too many arguments"
+    Utils_Assert size >= lb, "too few arguments"
+    Utils_Assert size <= ub, "too many arguments"
 End Sub
 
 ' Allows each Q function to fail gracefully with a nice error message.
-Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "Unknown error")
+Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "unknown error")
     If expr Then Exit Sub
     errorMsg = msg
     Err.Raise vbObjectError + 999
@@ -823,7 +813,7 @@ Private Function op_extern(args As Variant) As Variant
         Case 8: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8))
         Case 9: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9))
         Case 10: op_extern = Run(args(1)(1), a(1), a(2), a(3), a(4), a(5), a(6), a(7), a(8), a(9), a(10))
-        Case Else: Utils_Assert False, "Cannot evaluate " & args(1)(1) & ": Too many arguments"
+        Case Else: Utils_Assert False, "cannot evaluate " & args(1)(1) & ": too many arguments"
     End Select
     Utils_Conform op_extern
 End Function
@@ -1876,9 +1866,9 @@ End Function
 ' X = size(A) returns a 1-by-2 vector with the number of rows and columns in A.
 Private Function fn_size(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
-    Dim r: ReDim r(1, 2)
-    r(1, 1) = Utils_Rows(args(1))
-    r(1, 2) = Utils_Cols(args(1))
+    Dim rows As Long, cols As Long, r: ReDim r(1, 2)
+    Utils_Size args(1), rows, cols
+    r(1, 1) = rows: r(1, 2) = cols
     fn_size = r
 End Function
 

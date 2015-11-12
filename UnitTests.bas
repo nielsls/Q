@@ -1,6 +1,6 @@
 Sub TestAll()
 
-    Dim a, b, c, d, arr, arrItem
+    Dim a, b, c, d, arr
     a = [{ 1, 4, 7, 10, 13; 2, 5, 8, 11, 14; 3, 6, 9, 12, 15 }]
     b = [{ 1, 4, 7, 10, 13 }]
     c = [{ 1; 2; 3 }]
@@ -8,6 +8,9 @@ Sub TestAll()
     arr = Array(a, b, c, d)
 
     Debug.Assert Q("isequal(a,b)", Q("[]"), [NA()])
+    Debug.Assert Q("isequal(a,b)", Q("17e3"), 17 * 1000)
+    Debug.Assert Q("isequal(a,b)", Q("17e-3+2"), 17 * 0.001 + 2)
+    Debug.Assert Q("isequal(a,b)", Q("17.2e2"), 1720)
 
     Debug.Assert Q("isequal(a,b)", Q("-1.2(1)"), -1.2)                                      ' Scalar operators
     Debug.Assert Q("isequal(a,b)", Q("---1+(+2)"), 1)
@@ -47,7 +50,7 @@ Sub TestAll()
     Debug.Assert Q("isequal(a,b)", Q("1=2"), False)
     Debug.Assert Q("isequal(a,b)", Q("1==2"), False)
     
-    For Each arrItem In arr
+    Dim arrItem: For Each arrItem In arr
         Debug.Assert Q("isequal(a,b)", Q("rows(a)*cols(a)", arrItem), Q("#a", arrItem))
     
         Debug.Assert Q("isequal(a,b)", Q("a>10", arrItem), Q("~(a<=10)", arrItem))

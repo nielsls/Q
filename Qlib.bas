@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.61"
+Private Const VERSION = "1.62"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -247,7 +247,11 @@ End Function
 
 Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Variant
     Do While InStr(";)]", currentToken) = 0
-        Utils_Stack_Push Parse_Binary(), Parse_List
+        If currentToken = "," Then
+            Utils_Stack_Push Array("eval_constant", Empty), Parse_List
+        Else
+            Utils_Stack_Push Parse_Binary(), Parse_List
+        End If
         If currentToken = "," Then
             Tokens_Next
         ElseIf Not (previousTokenIsSpace And isSpaceSeparator) Then
@@ -593,7 +597,7 @@ End Sub
 ' Supply an abstract syntax tree and get a value
 Private Function eval_tree(root As Variant) As Variant
     ' Precalculate argument trees for all ordinary functions except if() and iferror()
-    If left(root(1), 3) = "fn_" And root(1) <> "fn_if" And root(1) <> "fn_iferror" Then
+    If left(root(1), 3) = "fn_" And root(1) <> "fn_if" And root(1) <> "fn_iferror" And root(1) <> "fn_expand" Then
         Utils_CalcArgs root(2)
     End If
     Select Case root(1)
@@ -2321,6 +2325,36 @@ Private Function fn_concat(args As Variant) As Variant
         Next j
     Next i
     Utils_ConformAndAssign r, fn_concat
+End Function
+
+' B = fn_expand(A)
+' B = fn_expand(A,n)
+' B = fn_expand(A,,m)
+' B = fn_expand(A,n,m)
+'
+' expand(A) returns a matrix beginning in cell A and expanding down and to the right
+' as far as there are contiguous non-empty cells.
+' Set n or m to specifically fix the number of rows or columns.
+Private Function fn_expand(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 3
+    Utils_Assert args(1)(1) = "eval_arg", "expand(): 1st argument must be a cell"
+    Dim cell As Range: Set cell = arguments(args(1)(2))
+    Dim rows As Long, cols As Long
+    If UBound(args) > 1 Then rows = eval_tree(args(2))
+    If UBound(args) > 2 Then cols = eval_tree(args(3))
+    If rows <= 0 Then
+        rows = cell.End(xlDown).Row - cell.Row + 1
+        If Not Application.WorksheetFunction.IsError(cell.Offset(1, 0)) Then
+            If cell.Offset(1, 0) = "" Then rows = 1
+        End If
+    End If
+    If cols <= 0 Then
+        cols = cell.End(xlToRight).Column - cell.Column + 1
+        If Not Application.WorksheetFunction.IsError(cell.Offset(1, 0)) Then
+            If cell.Offset(0, 1) = "" Then cols = 1
+        End If
+    End If
+    Utils_ConformAndAssign cell.Resize(rows, cols).Value, fn_expand
 End Function
 
 ' v = version

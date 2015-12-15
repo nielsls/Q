@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.62"
+Private Const VERSION = "1.63"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -443,6 +443,8 @@ End Sub
 ' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
 Private Sub Utils_ConformAndAssign(ByRef v As Variant, ByRef assignToMe As Variant)
     Select Case Utils_Dimensions(v)
+        Case 0:
+            assignToMe = v
         Case 1:
             If UBound(v) = 1 Then
                 assignToMe = v(1)
@@ -2332,29 +2334,37 @@ End Function
 ' B = fn_expand(A,,m)
 ' B = fn_expand(A,n,m)
 '
-' expand(A) returns a matrix beginning in cell A and expanding down and to the right
+' expand(A) returns the matrix beginning in cell A and expanding down and to the right
 ' as far as there are contiguous non-empty cells.
 ' Set n or m to specifically fix the number of rows or columns.
+' If n <= 0 or m <= 0, expand() will return the empty matrix.
 Private Function fn_expand(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
-    Utils_Assert args(1)(1) = "eval_arg", "expand(): 1st argument must be a cell"
+    Utils_Assert _
+        args(1)(1) = "eval_arg" And TypeName(arguments(args(1)(2))) = "Range", _
+        "expand(): 1st argument must be a cell"
     Dim cell As Range: Set cell = arguments(args(1)(2))
-    Dim rows As Long, cols As Long
-    If UBound(args) > 1 Then rows = eval_tree(args(2))
-    If UBound(args) > 2 Then cols = eval_tree(args(3))
-    If rows <= 0 Then
-        rows = cell.End(xlDown).Row - cell.Row + 1
-        If Not Application.WorksheetFunction.IsError(cell.Offset(1, 0)) Then
-            If cell.Offset(1, 0) = "" Then rows = 1
+    Dim rows As Variant: If UBound(args) > 1 Then rows = eval_tree(args(2))
+    Dim cols As Variant: If UBound(args) > 2 Then cols = eval_tree(args(3))
+    If IsEmpty(rows) Then
+        If IsEmpty(cell.Offset(1, 0)) Then
+            rows = 1
+        Else
+            rows = cell.End(xlDown).Row - cell.Row + 1
         End If
+    ElseIf rows <= 0 Then
+        Exit Function
     End If
-    If cols <= 0 Then
-        cols = cell.End(xlToRight).Column - cell.Column + 1
-        If Not Application.WorksheetFunction.IsError(cell.Offset(1, 0)) Then
-            If cell.Offset(0, 1) = "" Then cols = 1
+    If IsEmpty(cols) Then
+        If IsEmpty(cell.Offset(0, 1)) Then
+            cols = 1
+        Else
+            cols = cell.End(xlToRight).Column - cell.Column + 1
         End If
+    ElseIf cols <= 0 Then
+        Exit Function
     End If
-    Utils_ConformAndAssign cell.Resize(rows, cols).Value, fn_expand
+    Utils_ConformAndAssign cell.Resize(rows, cols), fn_expand
 End Function
 
 ' v = version

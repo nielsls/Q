@@ -402,7 +402,7 @@ Private Function Utils_Cols(ByRef v As Variant) As Long
     Utils_Size v, r, Utils_Cols
 End Function
 
-Private Sub Utils_Size(v As Variant, ByRef r As Long, ByRef c As Long)
+Private Sub Utils_Size(v As Variant, ByRef r As Variant, ByRef c As Variant)
     r = 0: c = 0
     Select Case Utils_Dimensions(v)
         Case 0: If Not IsEmpty(v) Then r = 1: c = 1

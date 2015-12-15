@@ -1872,9 +1872,8 @@ End Function
 ' X = size(A) returns a 1-by-2 vector with the number of rows and columns in A.
 Private Function fn_size(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
-    Dim rows As Long, cols As Long, r: ReDim r(1, 2)
-    Utils_Size args(1), rows, cols
-    r(1, 1) = rows: r(1, 2) = cols
+    Dim r: ReDim r(1, 2)
+    Utils_Size args(1), r(1, 1), r(1, 2)
     fn_size = r
 End Function
 

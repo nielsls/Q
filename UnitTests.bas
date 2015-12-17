@@ -77,6 +77,8 @@ Sub TestAll()
         
         Debug.Assert Q("isequal(a,b)", Q("reshape(a,#a,[])", arrItem), Q("a(:)", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("reshape(a,[],#a)", arrItem), Q("a(:)'", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("reshape(a,#a,,)", arrItem), Q("a(:)", arrItem))
+        Debug.Assert Q("isequal(a,b)", Q("reshape(a,,#a)", arrItem), Q("a(:)'", arrItem))
         
         Debug.Assert Q("isequal(a,b)", Q("rows(repmat(a,7,8))", arrItem), Q("rows(a)*7", arrItem))
         Debug.Assert Q("isequal(a,b)", Q("cols(repmat(a,7,8))", arrItem), Q("cols(a)*8", arrItem))
@@ -84,6 +86,9 @@ Sub TestAll()
         
         Debug.Assert Q("isequal(a,b)", Q("cummax(a)", a), Q("-cummin(-a,1)", a))
         Debug.Assert Q("isequal(a,b)", Q("cummax(a,2)", a), Q("-cummin(-a,2)", a))
+        
+        Debug.Assert Q("isequal(a,b)", Q("max(a)", a), Q("-min(-a,,1)", a))
+        Debug.Assert Q("isequal(a,b)", Q("max(a,,2)", a), Q("-min(-a,,2)", a))
     Next arrItem
 
     Debug.Assert Q("isequal(a,b)", Q("sort(a)", a), Q("sort(a, ""descend"")(end:-1:1,:)", a))

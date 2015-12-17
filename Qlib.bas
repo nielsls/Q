@@ -105,6 +105,7 @@ End Function
 '   - The empty matrix/scalar [] has per definition 0 rows, 0 cols,
 '     dimension 0 and is internally represented by the default
 '     Variant value Empty
+'     Missing parameters in function calls are given the value Empty
 '*******************************************************************
 
 '*********************
@@ -359,8 +360,8 @@ Private Function MIN(a As Variant, b As Variant) As Variant
     If a < b Then MIN = a Else MIN = b
 End Function
 
-Private Function IFF(a As Boolean, b As Variant, c As Variant) As Variant
-    If a Then IFF = b Else IFF = c
+Private Function IFF(expr As Boolean, alt1 As Variant, alt2 As Variant) As Variant
+    If expr Then IFF = alt1 Else IFF = alt2
 End Function
 
 Private Sub Utils_DumpTree(tree As Variant, Optional spacer As String = "")
@@ -605,11 +606,10 @@ Private Function eval_tree(root As Variant) As Variant
     Select Case root(1)
         ' This is ugly, but much faster than just naively calling Application.Run()
         ' Just hardcode the most used functions
-        Case "eval_constant": eval_tree = eval_constant(root(2))
+        Case "eval_constant": eval_tree = root(2)
         Case "eval_arg": eval_tree = eval_arg(root(2))
         Case "eval_index": eval_tree = eval_index(root(2))
         Case "eval_end": eval_tree = eval_end(root(2))
-        Case "eval_colon": eval_tree = eval_colon(root(2))
         Case "eval_concat": eval_tree = eval_concat(root(2))
         Case "op_eq": eval_tree = op_eq(root(2))
         Case "op_plus": eval_tree = op_plus(root(2))
@@ -621,10 +621,6 @@ Private Function eval_tree(root As Variant) As Variant
         Case Else
             eval_tree = Run(root(1), root(2))
     End Select
-End Function
-
-Private Function eval_constant(args As Variant) As Variant
-    eval_constant = args
 End Function
 
 Private Function eval_arg(args As Variant) As Variant
@@ -1222,7 +1218,7 @@ End Function
 ' X = round(A,k) rounds the elements of A with k decimal places. Default is 0
 Private Function fn_round(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 2
-    Dim k As Long: If UBound(args) > 1 Then k = args(2)
+    Dim k As Long: k = Utils_GetOptionalArg(args, 2, 0)
     Utils_ForceMatrix args(1)
     Dim r: ReDim r(UBound(args(1), 1), UBound(args(1), 2))
     Dim x As Long, y As Long

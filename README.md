@@ -37,4 +37,4 @@ It features almost all MATLAB operators, selected standard functions and has com
 4. Copy-paste the contents of [Qlib.bas](https://raw.githubusercontent.com/nielsls/Q/master/Qlib.bas) to your new module
 5. Well done! Go test in Excel by typing `=Q("2+2")` in a cell
 
-2015, Niels Lykke Sørensen
+2016, Niels Lykke Sørensen

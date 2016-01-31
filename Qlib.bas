@@ -33,12 +33,12 @@
 ' For the newest version, go to:
 ' http://github.com/nielsls/Q
 '
-' 2015, Niels Lykke Sørensen
+' 2016, Niels Lykke Sørensen
 
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "1.63"
+Private Const VERSION = "1.64"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -67,21 +67,18 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     Tokens_Next ' Find first token in input string
     
     Dim root As Variant
-    Do
-        Select Case currentToken
-            Case ""
-                Exit Do
-            Case ";", vbLf
-                Tokens_Next
-            Case Else
-                root = Parse_Binary()
-                'Utils_DumpTree root    'Uncomment for debugging
-                ans = eval_tree(root)
-                Utils_Assert _
-                    currentToken = "" Or currentToken = ";" Or currentToken = vbLf, _
-                    "'" & currentToken & "' not allowed here"
-        End Select
-    Loop While True
+    While currentToken <> ""
+        If currentToken = ";" Or currentToken = vbLf Then
+            Tokens_Next
+        Else
+            root = Parse_Binary()
+            'Utils_DumpTree root    'Uncomment for debugging
+            ans = eval_tree(root)
+            Utils_Assert _
+                currentToken = "" Or currentToken = ";" Or currentToken = vbLf, _
+                "'" & currentToken & "' not allowed here"
+        End If
+    Wend
     
     Q = ans
     If IsEmpty(Q) Then Q = [NA()]  'Makes sure the empty matrix is not converted to a 0
@@ -2036,8 +2033,15 @@ Private Function fn_reshape(args As Variant) As Variant
     Dim r_i As Long, r_j As Long, arg_i As Long, arg_j As Long
     Utils_ForceMatrix args(1)
     Utils_Size args(1), rows, cols
-    If IsEmpty(args(2)) Then args(2) = rows * cols / args(3)
-    If IsEmpty(args(3)) Then args(3) = rows * cols / args(2)
+    If IsEmpty(args(2)) Then
+        Utils_Assert rows * cols Mod args(3) = 0, "reshape: number of elements not evenly divisible by m"
+        args(2) = rows * cols / args(3)
+    ElseIf IsEmpty(args(3)) Then
+        Utils_Assert rows * cols Mod args(2) = 0, "reshape: number of elements not evenly divisible by n"
+        args(3) = rows * cols / args(2)
+    Else
+        Utils_Assert rows * cols = args(2) * args(3), "reshape: number of elements is not equal to n*m"
+    End If
     Dim r: ReDim r(args(2), args(3))
     For idx = 1 To rows * cols
         Utils_Ind2Sub rows, idx, arg_i, arg_j

@@ -25,7 +25,7 @@ It features almost all MATLAB operators, selected standard functions and has com
   - Most used functions: <i>eye,zeros,ones,sum,cumsum,cumprod,prod,
     mean,median,prctile,std,isequal,fix,rand,randn,repmat,reshape,find,sort,sqrt,exp,inv</i>...
   - Indexing via fx. `a(2,:)` or `a(5,3:end)`
-  - Concatenate matrices with '[ ]', i.e. `[ a b; c d]`
+  - Concatenate matrices with '[ ]', i.e. `[ a b; c d ]`
   - Multiple expressions separated by ";" or a line break.
   - Excel functions: <i>if,iferror</i>
   - Prefix function calls with ! to call external VBA functions not found in Q.

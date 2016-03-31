@@ -39,7 +39,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.00"
+Private Const VERSION = "2.01"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -839,28 +839,40 @@ End Function
 
 ' Matches operator ||
 Private Function op_orshortcircuit(args As Variant) As Variant
+    args(1) = eval_tree(args(1))
+    Utils_Assert Utils_Numel(args(1)) = 1, "||: 1st argument must be scalar"
     On Error GoTo ErrorHandler
-    If CBool(eval_tree(args(1))) Then
-        op_orshortcircuit = True
+    If CBool(args(1)(1, 1)) Then
+        op_orshortcircuit = Utils_ToMatrix(True)
     Else
-        op_orshortcircuit = CBool(eval_tree(args(2)))
+        On Error GoTo 0
+        args(2) = eval_tree(args(2))
+        Utils_Assert Utils_Numel(args(2)) = 1, "||: 2nd argument must be scalar"
+        On Error GoTo ErrorHandler
+        op_orshortcircuit = Utils_ToMatrix(CBool(args(2)(1, 1)))
     End If
     Exit Function
 ErrorHandler:
-    Utils_Assert False, "operator ||: could not convert argument to boolean value"
+    Utils_Assert False, "||: could not convert argument to boolean value"
 End Function
 
 ' Matches operator &&
 Private Function op_andshortcircuit(args As Variant) As Variant
+    args(1) = eval_tree(args(1))
+    Utils_Assert Utils_Numel(args(1)) = 1, "&&: 1st argument must be scalar"
     On Error GoTo ErrorHandler
-    If Not CBool(eval_tree(args(1))) Then
-        op_andshortcircuit = False
+    If Not CBool(args(1)(1, 1)) Then
+        op_andshortcircuit = Utils_ToMatrix(False)
     Else
-        op_andshortcircuit = CBool(eval_tree(args(2)))
+        On Error GoTo 0
+        args(2) = eval_tree(args(2))
+        Utils_Assert Utils_Numel(args(2)) = 1, "&&: 2nd argument must be scalar"
+        On Error GoTo ErrorHandler
+        op_andshortcircuit = Utils_ToMatrix(CBool(args(2)(1, 1)))
     End If
     Exit Function
 ErrorHandler:
-    Utils_Assert False, "operator &&: could not convert argument to boolean value"
+    Utils_Assert False, "&&: could not convert argument to boolean value"
 End Function
 
 ' Matches operator &

@@ -39,7 +39,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.01"
+Private Const VERSION = "2.1"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -54,7 +54,6 @@ Private currentToken As String
 Private previousTokenIsSpace As Boolean
 Private arguments As Variant
 Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
-Private errorMsg As String
 Private ans As Variant       ' Result of last answer when multiple expressions are used as input
 
 ' Entry point - the only public function in the library
@@ -64,8 +63,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     expression = expr
     arguments = args
     endValues = Empty
-    errorMsg = ""
-    ans = [NA()]
+    ans = Empty
     expressionIndex = 1
     Tokens_Next ' Find first token in input string
     
@@ -76,7 +74,7 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
         Else
             root = Parse_Binary()
             'Utils_DumpTree root    'Uncomment for debugging
-            ans = eval_tree(root)
+            ans = calc_tree(root)
             Utils_Assert _
                 currentToken = "" Or currentToken = ";" Or currentToken = vbLf, _
                 "'" & currentToken & "' not allowed here"
@@ -85,9 +83,9 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     
     Select Case Utils_Numel(ans)
         Case 0
-            'If an empty matrix is returned from Q() it must
-            'be converted to #N/A if used in a cell to avoid
-            'being converted to 0.
+            'If an empty matrix is returned from Q() and
+            'used in a cell it must be converted to #N/A
+            'to avoid being converted to 0.
             If Utils_WasCalledFromCell() Then Q = [NA()]
         Case 1
             Q = ans(1, 1)
@@ -97,12 +95,11 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     Exit Function
     
 ErrorHandler:
-    ' Cannot rely on usual error message transfer only as
-    ' this does not work when using Application.Run()
-    If errorMsg = "" Then errorMsg = Err.Description
     ' Only raise an error if Q was called from VBA and not a cell.
-    Utils_Assert Utils_WasCalledFromCell(), errorMsg
-    Q = "ERROR - " & errorMsg
+    Utils_Assert _
+        Utils_WasCalledFromCell(), _
+        Err.Description & " in """ & expression & """"
+    Q = "ERROR - " & Err.Description
 End Function
 
 Private Function Utils_WasCalledFromCell() As Boolean
@@ -309,38 +306,29 @@ Private Function Parse_Atomic() As Variant
     Utils_Assert currentToken <> "", "missing argument"
     Select Case Asc(currentToken) ' Filter on first char of token
             
-        Case Asc(":")
-            Parse_Atomic = Array("eval_colon", Empty)
-            Tokens_Next
-            
         Case Asc("(")
             Tokens_Next
             Parse_Atomic = Parse_Binary()
             Tokens_AssertAndNext ")"
             
-        Case Asc("[")  ' Found a matrix concatenation
-            Tokens_Next
-            Parse_Atomic = Array("eval_concat", Parse_Matrix())
-            Tokens_AssertAndNext "]"
-    
-        Case Asc("""") ' Found a constant string
-            Parse_Atomic = Array("eval_constant", Utils_ToMatrix(Mid(currentToken, 2, Len(currentToken) - 2)))
+        Case Asc(":")
+            Parse_Atomic = Array("eval_colon")
             Tokens_Next
             
         Case Asc("0") To Asc("9") ' Found a numeric constant
             Parse_Atomic = Array("eval_constant", Utils_ToMatrix(val(currentToken)))
             Tokens_Next
             
-        Case Asc("A") To Asc("Z")
-            Parse_Atomic = Array("eval_arg", Asc(currentToken) - Asc("A"))
+        Case Asc("A") To Asc("Z")  ' Found an input variable
+            Parse_Atomic = Array("eval_variable", Asc(currentToken) - Asc("A"))
             Tokens_Next
             
         Case Asc("a") To Asc("z")
             If currentToken = "end" Then
-                Parse_Atomic = Array("eval_end", Empty)
+                Parse_Atomic = Array("eval_end")
                 Tokens_Next
             ElseIf currentToken = "ans" Then
-                Parse_Atomic = Array("eval_ans", Empty)
+                Parse_Atomic = Array("eval_ans")
                 Tokens_Next
             Else                   ' Found a function call
                 Parse_Atomic = "fn_" & currentToken
@@ -354,8 +342,18 @@ Private Function Parse_Atomic() As Variant
                 End If
             End If
             
+        Case Asc("[")  ' Found a matrix concatenation
+            Tokens_Next
+            Parse_Atomic = Array("eval_concat", Parse_Matrix())
+            Tokens_AssertAndNext "]"
+            
+        Case Asc("""") ' Found a string constant
+            Parse_Atomic = Array("eval_constant", Utils_ToMatrix(Mid(currentToken, 2, Len(currentToken) - 2)))
+            Tokens_Next
+            
         Case Else
             Utils_Assert False, "unexpected token: " & currentToken
+            
     End Select
 End Function
 
@@ -483,7 +481,7 @@ End Function
 ' Transforms all entries in the vector from trees to values
 Private Sub Utils_CalcArgs(args As Variant)
     Dim i As Long: For i = 1 To Utils_Stack_Size(args)
-        args(i) = eval_tree(args(i))
+        args(i) = calc_tree(args(i))
     Next i
 End Sub
 
@@ -585,59 +583,163 @@ End Sub
 ' Allows each Q function to fail gracefully with a nice error message.
 Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "unknown error")
     If expr Then Exit Sub
-    errorMsg = msg
-    Err.Raise 999, , errorMsg & " in """ & expression & """"
+    Err.Raise 999, , msg
 End Sub
+
+'*****************
+'*** CALC ROOT ***
+'*****************
+
+' calc_tree is responsible for turning the
+' abstract syntax tree (AST) into an actual
+' statement.
+' It does this by recursively calling the
+' different functions and operators needed.
+'
+' Branches of "select case" statements are
+' used to determine which function to call.
+' A more elegant solution would be to just
+' invoke Application.Run().
+' However, Application.Run is not feasible
+' as it is slow and fucks up error propaga-
+' tion.
+Private Function calc_tree(root As Variant) As Variant
+    Dim prefix As String, name As String
+    root(1) = Split(root(1), "_")
+    prefix = root(1)(0)
+    name = root(1)(1)
+    
+    Select Case prefix
+    
+    ' Non-functions
+    Case "eval":
+        Select Case name
+        Case "constant": calc_tree = root(2)
+        Case "variable": calc_tree = eval_variable(root(2))
+        Case "index": calc_tree = eval_index(root(2))
+        Case "end": calc_tree = eval_end()
+        Case "concat": calc_tree = eval_concat(root(2))
+        Case "ans": calc_tree = ans
+        Case "colon": Utils_Assert False, "colon not allowed here"
+        End Select
+       
+    ' Operators
+    Case "op"
+        Select Case name
+        Case "and": calc_tree = op_and(root(2))
+        Case "andshortcircuit": calc_tree = op_andshortcircuit(root(2))
+        Case "colon": calc_tree = op_colon(root(2))
+        Case "divide": calc_tree = op_divide(root(2))
+        Case "eq": calc_tree = op_eq(root(2))
+        Case "extern": calc_tree = op_extern(root(2))
+        Case "gt": calc_tree = op_gt(root(2))
+        Case "gte": calc_tree = op_gte(root(2))
+        Case "lt": calc_tree = op_lt(root(2))
+        Case "lte": calc_tree = op_lte(root(2))
+        Case "minus": calc_tree = op_minus(root(2))
+        Case "mpower": calc_tree = op_mpower(root(2))
+        Case "mtimes": calc_tree = op_mtimes(root(2))
+        Case "ne": calc_tree = op_ne(root(2))
+        Case "negate": calc_tree = op_negate(root(2))
+        Case "numel": calc_tree = op_numel(root(2))
+        Case "or": calc_tree = op_or(root(2))
+        Case "orshortcircuit": calc_tree = op_orshortcircuit(root(2))
+        Case "plus": calc_tree = op_plus(root(2))
+        Case "power": calc_tree = op_power(root(2))
+        Case "times": calc_tree = op_times(root(2))
+        Case "transpose": calc_tree = op_transpose(root(2))
+        Case "uplus": calc_tree = op_uplus(root(2))
+        Case "uminus": calc_tree = op_uminus(root(2))
+        End Select
+      
+    ' Functions
+    Case "fn"
+        If name <> "if" And name <> "iferror" And name <> "expand" Then Utils_CalcArgs root(2)
+        Select Case name
+        Case "all": calc_tree = fn_all(root(2))
+        Case "any": calc_tree = fn_any(root(2))
+        Case "arrayfun": calc_tree = fn_arrayfun(root(2))
+        Case "ceil": calc_tree = fn_ceil(root(2))
+        Case "cols": calc_tree = fn_cols(root(2))
+        Case "corr": calc_tree = fn_corr(root(2))
+        Case "count": calc_tree = fn_count(root(2))
+        Case "cov": calc_tree = fn_cov(root(2))
+        Case "cummax": calc_tree = fn_cummax(root(2))
+        Case "cummin": calc_tree = fn_cummin(root(2))
+        Case "cumprod": calc_tree = fn_cumprod(root(2))
+        Case "cumsum": calc_tree = fn_cumsum(root(2))
+        Case "diag": calc_tree = fn_diag(root(2))
+        Case "e": calc_tree = fn_e(root(2))
+        Case "exp": calc_tree = fn_exp(root(2))
+        Case "expand": calc_tree = fn_expand(root(2))
+        Case "eye": calc_tree = fn_eye(root(2))
+        Case "false": calc_tree = fn_false(root(2))
+        Case "find": calc_tree = fn_find(root(2))
+        Case "fix": calc_tree = fn_fix(root(2))
+        Case "floor": calc_tree = fn_floor(root(2))
+        Case "if": calc_tree = fn_if(root(2))
+        Case "iferror": calc_tree = fn_iferror(root(2))
+        Case "inv": calc_tree = fn_inv(root(2))
+        Case "isempty": calc_tree = fn_isempty(root(2))
+        Case "isequal": calc_tree = fn_isequal(root(2))
+        Case "iserror": calc_tree = fn_iserror(root(2))
+        Case "islogical": calc_tree = fn_islogical(root(2))
+        Case "isnum": calc_tree = fn_isnum(root(2))
+        Case "join": calc_tree = fn_join(root(2))
+        Case "log": calc_tree = fn_log(root(2))
+        Case "max": calc_tree = fn_max(root(2))
+        Case "mean": calc_tree = fn_mean(root(2))
+        Case "median": calc_tree = fn_median(root(2))
+        Case "min": calc_tree = fn_min(root(2))
+        Case "normcdf": calc_tree = fn_normcdf(root(2))
+        Case "numel": calc_tree = fn_numel(root(2))
+        Case "ones": calc_tree = fn_ones(root(2))
+        Case "pi": calc_tree = fn_pi(root(2))
+        Case "prctile": calc_tree = fn_prctile(root(2))
+        Case "prod": calc_tree = fn_prod(root(2))
+        Case "rand": calc_tree = fn_rand(root(2))
+        Case "randi": calc_tree = fn_randi(root(2))
+        Case "randn": calc_tree = fn_randn(root(2))
+        Case "repmat": calc_tree = fn_repmat(root(2))
+        Case "reshape": calc_tree = fn_reshape(root(2))
+        Case "round": calc_tree = fn_round(root(2))
+        Case "rows": calc_tree = fn_rows(root(2))
+        Case "size": calc_tree = fn_size(root(2))
+        Case "sort": calc_tree = fn_sort(root(2))
+        Case "sqrt": calc_tree = fn_sqrt(root(2))
+        Case "std": calc_tree = fn_std(root(2))
+        Case "sum": calc_tree = fn_sum(root(2))
+        Case "tick2ret": calc_tree = fn_tick2ret(root(2))
+        Case "tostring": calc_tree = fn_tostring(root(2))
+        Case "true": calc_tree = fn_true(root(2))
+        Case "unique": calc_tree = fn_unique(root(2))
+        Case "var": calc_tree = fn_var(root(2))
+        Case "version": calc_tree = fn_version(root(2))
+        Case "xor": calc_tree = fn_xor(root(2))
+        Case "zeros": calc_tree = fn_zeros(root(2))
+        Case Else:
+            Utils_Assert _
+                False, _
+                "unknown function """ & name & """" _
+                    & IFF(Len(name) = 1, "; did you mean variable " & UCase(name) & "?", "")
+        End Select
+            
+    End Select
+End Function
 
 '**********************
 '*** EVAL FUNCTIONS ***
 '**********************
 
-' The main eval function
-' Supply an abstract syntax tree and get a value
-Private Function eval_tree(root As Variant) As Variant
-    ' Precalculate argument trees for all ordinary functions except if() and iferror()
-    If left(root(1), 3) = "fn_" And root(1) <> "fn_if" And root(1) <> "fn_iferror" And root(1) <> "fn_expand" Then
-        Utils_CalcArgs root(2)
-    End If
-    Select Case root(1)
-        ' This is ugly, but much faster than just naively calling Application.Run()
-        ' Just hardcode the most used functions
-        Case "eval_constant": eval_tree = root(2)
-        Case "eval_arg": eval_tree = eval_arg(root(2))
-        Case "eval_index": eval_tree = eval_index(root(2))
-        Case "eval_end": eval_tree = eval_end(root(2))
-        Case "eval_concat": eval_tree = eval_concat(root(2))
-        Case "op_eq": eval_tree = op_eq(root(2))
-        Case "op_plus": eval_tree = op_plus(root(2))
-        Case "op_minus": eval_tree = op_minus(root(2))
-        Case "op_mtimes": eval_tree = op_mtimes(root(2))
-        Case "op_colon": eval_tree = op_colon(root(2))
-        Case "fn_sum": eval_tree = fn_sum(root(2))
-        Case "fn_repmat": eval_tree = fn_repmat(root(2))
-        Case Else
-            eval_tree = Run(root(1), root(2))
-    End Select
+Private Function eval_variable(args As Variant) As Variant
+    Utils_Assert args <= UBound(arguments), "variable '" & Chr(Asc("A") + args) & "' not found."
+    eval_variable = CVar(arguments(args))
+    Utils_Conform eval_variable
 End Function
 
-Private Function eval_arg(args As Variant) As Variant
-    Utils_Assert args <= UBound(arguments), "argument '" & Chr(Asc("a") + args) & "' not found."
-    eval_arg = CVar(arguments(args))
-    Utils_Conform eval_arg
-End Function
-
-Private Function eval_end(args As Variant) As Variant
+Private Function eval_end() As Variant
     Utils_Assert Utils_Stack_Size(endValues) > 0, """end"" not allowed here."
-    eval_end = Utils_Stack_Peek(endValues)
-    Utils_Conform eval_end
-End Function
-
-Private Function eval_ans(args As Variant) As Variant
-    eval_ans = ans
-End Function
-
-Private Function eval_colon(args As Variant) As Variant
-    Utils_Assert False, "colon not allowed here"
+    eval_end = Utils_ToMatrix(Utils_Stack_Peek(endValues))
 End Function
 
 Private Function Utils_IsVectorShape(r As Long, c As Long) As Boolean
@@ -654,13 +756,13 @@ Private Function eval_indexarg(root As Variant, endValue As Long, idx As Variant
         t = 2
         ReDim idx(3)
         Utils_Stack_Push endValue, endValues
-        idx(1) = eval_tree(root(2)(1))(1, 1)
+        idx(1) = calc_tree(root(2)(1))(1, 1)
         If root(2)(2)(1) <> "op_colon" Then
             idx(2) = 1
-            idx(3) = eval_tree(root(2)(2))(1, 1)
+            idx(3) = calc_tree(root(2)(2))(1, 1)
         Else
-            idx(2) = eval_tree(root(2)(2)(2)(1))(1, 1)
-            idx(3) = eval_tree(root(2)(2)(2)(2))(1, 1)
+            idx(2) = calc_tree(root(2)(2)(2)(1))(1, 1)
+            idx(3) = calc_tree(root(2)(2)(2)(2))(1, 1)
         End If
         Utils_Stack_Pop endValues
         r = 1
@@ -669,7 +771,7 @@ Private Function eval_indexarg(root As Variant, endValue As Long, idx As Variant
     Else
         t = 3
         Utils_Stack_Push endValue, endValues
-        idx = eval_tree(root)
+        idx = calc_tree(root)
         Utils_Stack_Pop endValues
         Utils_Size idx, r, c
         Dim i As Long, j As Long
@@ -695,7 +797,7 @@ Private Function eval_index(args As Variant) As Variant
     Dim idx1_r As Long, idx2_r As Long
     Dim idx1_c As Long, idx2_c As Long
     Dim t1 As Long, t2 As Long ' t=1 for colon only, t=2 for sequence, t=3 for vector/mat
-    args(1) = eval_tree(args(1))
+    args(1) = calc_tree(args(1))
     Utils_Size args(1), arg_r, arg_c
     
     Select Case Utils_Stack_Size(args(2))
@@ -766,7 +868,7 @@ Private Function eval_concat(args As Variant) As Variant
         totalCols = 0
         requiredRows = 0
         For j = 1 To Utils_Stack_Size(args(i)) ' loop over each column
-            args(i)(j) = eval_tree(args(i)(j))
+            args(i)(j) = calc_tree(args(i)(j))
             Utils_Size args(i)(j), rows, cols
             If requiredRows = 0 Then
                 requiredRows = rows
@@ -839,14 +941,14 @@ End Function
 
 ' Matches operator ||
 Private Function op_orshortcircuit(args As Variant) As Variant
-    args(1) = eval_tree(args(1))
+    args(1) = calc_tree(args(1))
     Utils_Assert Utils_Numel(args(1)) = 1, "||: 1st argument must be scalar"
     On Error GoTo ErrorHandler
     If CBool(args(1)(1, 1)) Then
         op_orshortcircuit = Utils_ToMatrix(True)
     Else
         On Error GoTo 0
-        args(2) = eval_tree(args(2))
+        args(2) = calc_tree(args(2))
         Utils_Assert Utils_Numel(args(2)) = 1, "||: 2nd argument must be scalar"
         On Error GoTo ErrorHandler
         op_orshortcircuit = Utils_ToMatrix(CBool(args(2)(1, 1)))
@@ -858,16 +960,16 @@ End Function
 
 ' Matches operator &&
 Private Function op_andshortcircuit(args As Variant) As Variant
-    args(1) = eval_tree(args(1))
+    args(1) = calc_tree(args(1))
     Utils_Assert Utils_Numel(args(1)) = 1, "&&: 1st argument must be scalar"
-    On Error GoTo ErrorHandler
+    'On Error GoTo ErrorHandler
     If Not CBool(args(1)(1, 1)) Then
         op_andshortcircuit = Utils_ToMatrix(False)
     Else
-        On Error GoTo 0
-        args(2) = eval_tree(args(2))
+     '   On Error GoTo 0
+        args(2) = calc_tree(args(2))
         Utils_Assert Utils_Numel(args(2)) = 1, "&&: 2nd argument must be scalar"
-        On Error GoTo ErrorHandler
+      '  On Error GoTo ErrorHandler
         op_andshortcircuit = Utils_ToMatrix(CBool(args(2)(1, 1)))
     End If
     Exit Function
@@ -1003,16 +1105,16 @@ End Function
 ' Matches operator : with one or two arguments
 Private Function op_colon(args As Variant) As Variant
     Dim m As Long, i As Long, step As Double, start As Double, last As Double
-    start = eval_tree(args(1))(1, 1)
+    start = calc_tree(args(1))(1, 1)
     If args(2)(1) <> "op_colon" Then
         ' x:y
         step = 1
-        last = eval_tree(args(2))(1, 1)
+        last = calc_tree(args(2))(1, 1)
         m = 1 + WorksheetFunction.RoundDown(last - start, 0)
     Else
         ' x:y:z
-        step = eval_tree(args(2)(2)(1))(1, 1)
-        last = eval_tree(args(2)(2)(2))(1, 1)
+        step = calc_tree(args(2)(2)(1))(1, 1)
+        last = calc_tree(args(2)(2)(2))(1, 1)
         m = 1 + WorksheetFunction.RoundDown((last - start) / step, 0)
     End If
     If m < 1 Then Exit Function
@@ -1039,7 +1141,7 @@ End Function
 
 ' Matches unary operator +
 Private Function op_uplus(args As Variant) As Variant
-    op_uplus = eval_tree(args(1))
+    op_uplus = calc_tree(args(1))
 End Function
 
 ' Matches binary operator -
@@ -1162,7 +1264,7 @@ End Function
 
 ' Matches postfix unary operator '
 Private Function op_transpose(args As Variant) As Variant
-    args(1) = eval_tree(args(1))
+    args(1) = calc_tree(args(1))
     If IsEmpty(args(1)) Then Exit Function
     op_transpose = WorksheetFunction.Transpose(args(1))
     Utils_Conform op_transpose
@@ -1170,7 +1272,7 @@ End Function
 
 ' Matches operator #
 Private Function op_numel(args As Variant) As Variant
-    op_numel = Utils_ToMatrix(Utils_Numel(eval_tree(args(1))))
+    op_numel = Utils_ToMatrix(Utils_Numel(calc_tree(args(1))))
 End Function
 
 
@@ -1933,9 +2035,9 @@ End Function
 ' X = size(A) returns a 1-by-2 vector with the number of rows and columns in A.
 Private Function fn_size(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
-    Dim r: ReDim r(1, 2)
-    Utils_Size args(1), r(1, 1), r(1, 2)
-    fn_size = r
+    Dim out: ReDim out(1, 2)
+    Utils_Size args(1), out(1, 1), out(1, 2)
+    fn_size = out
 End Function
 
 ' X = diag(A)
@@ -1972,13 +2074,13 @@ Private Function fn_rand(args As Variant) As Variant
     Dim n As Long, m As Long
     Utils_GetSizeFromArgs args, n, m, 1
     If n < 1 Or m < 1 Then Exit Function
-    Dim r: ReDim r(n, m)
-    For n = 1 To UBound(r, 1)
-        For m = 1 To UBound(r, 2)
-            r(n, m) = Rnd
+    Dim out: ReDim out(n, m)
+    For n = 1 To UBound(out, 1)
+        For m = 1 To UBound(out, 2)
+            out(n, m) = Rnd
         Next m
     Next n
-    fn_rand = r
+    fn_rand = out
 End Function
 
 ' X = randi(imax)
@@ -2002,13 +2104,13 @@ Private Function fn_randi(args As Variant) As Variant
         imin = args(1)(1, 1)
         imax = args(1)(MIN(2, UBound(args(1), 1)), MIN(2, UBound(args(1), 2)))
     End If
-    Dim r: ReDim r(n, m)
-    For n = 1 To UBound(r, 1)
-        For m = 1 To UBound(r, 2)
-            r(n, m) = CLng(Rnd * (imax - imin)) + imin
+    Dim out: ReDim out(n, m)
+    For n = 1 To UBound(out, 1)
+        For m = 1 To UBound(out, 2)
+            out(n, m) = CLng(Rnd * (imax - imin)) + imin
         Next m
     Next n
-    fn_randi = r
+    fn_randi = out
 End Function
 
 ' X = randn
@@ -2139,26 +2241,31 @@ Private Function fn_tostring(args As Variant) As Variant
     fn_tostring = args(1)
 End Function
 
-' X = if(a,B,C)
+' Z = if(B,X,Y)
 '
-' X = if(a,B,C) returns B if a evaluates to true; otherwise C.
-' Note: B is only evaluated if a is true and C is only evaluated if a is false
+' Z = if(B,X,Y) returns X if B evaluates to true; otherwise Y.
+' Note: X is only evaluated if B is true and Y is only evaluated if B is false
 Private Function fn_if(args As Variant) As Variant
     Utils_AssertArgsCount args, 3, 3
-    fn_if = eval_tree(args(3 + CLng(CBool(eval_tree(args(1))))))
+    args(1) = calc_tree(args(1))
+    If IsEmpty(args(1)) Then
+        fn_if = calc_tree(args(3))
+    Else
+        fn_if = calc_tree(args(3 + CLng(CBool(args(1)(1, 1)))))
+    End If
 End Function
 
 ' X = iferror(A,B)
 '
-' X = iferror(A,B) returns A if the evaluation of A does not result in a error; then B is returned instead.
+' X = iferror(A,B) returns A if the evaluation of A does not result in a error;
+' otherwise, B is returned.
 Private Function fn_iferror(args As Variant) As Variant
     Utils_AssertArgsCount args, 2, 2
     On Error GoTo ErrorHandler:
-    fn_iferror = eval_tree(args(1))
+    fn_iferror = calc_tree(args(1))
     Exit Function
 ErrorHandler:
-    errorMsg = ""
-    fn_iferror = eval_tree(args(2))
+    fn_iferror = calc_tree(args(2))
 End Function
 
 ' Y = diff(X)
@@ -2190,9 +2297,9 @@ Private Function fn_unique(args As Variant) As Variant
     Dim numel As Long, i As Long, counter As Long, save
     numel = Utils_Numel(args(1))
     If numel < 1 Then Exit Function
-    args(1) = fn_reshape(Array(args(1), Empty, 1))
+    args(1) = fn_reshape(Array(args(1), Empty, Utils_ToMatrix(1)))
     args(1) = fn_sort(Array(args(1)))
-    ReDim save(1 To rows - 1)
+    ReDim save(1 To numel - 1)
     counter = 1
     For i = 1 To UBound(save)
         save(i) = (0 <> Utils_Compare(args(1)(i, 1), args(1)(i + 1, 1)))
@@ -2217,8 +2324,9 @@ End Function
 '
 ' sort() sorts the entries in each row or column.
 '
-' "descend"  Sort descending
-' "indices"  Return sorted indices instead of values
+' Flags:
+' "descend":  Sort descending
+' "indices":  Return sorted indices instead of values
 Private Function fn_sort(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 4
     
@@ -2388,8 +2496,8 @@ Private Function fn_expand(args As Variant) As Variant
         args(1)(1) = "eval_arg" And TypeName(arguments(args(1)(2))) = "Range", _
         "expand(): 1st argument must be a cell"
     Dim cell As Range: Set cell = arguments(args(1)(2))
-    Dim rows As Variant: If UBound(args) > 1 Then rows = eval_tree(args(2))
-    Dim cols As Variant: If UBound(args) > 2 Then cols = eval_tree(args(3))
+    Dim rows As Variant: If UBound(args) > 1 Then rows = calc_tree(args(2))
+    Dim cols As Variant: If UBound(args) > 2 Then cols = calc_tree(args(3))
     If IsEmpty(rows) Then
         If IsEmpty(cell.Offset(1, 0)) Then
             rows = 1

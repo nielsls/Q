@@ -39,7 +39,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.1"
+Private Const VERSION = "2.11"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -2493,7 +2493,7 @@ End Function
 Private Function fn_expand(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
     Utils_Assert _
-        args(1)(1) = "eval_arg" And TypeName(arguments(args(1)(2))) = "Range", _
+        args(1)(1) = "eval_variable" And TypeName(arguments(args(1)(2))) = "Range", _
         "expand(): 1st argument must be a cell"
     Dim cell As Range: Set cell = arguments(args(1)(2))
     Dim rows As Variant: If UBound(args) > 1 Then rows = calc_tree(args(2))

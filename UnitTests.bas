@@ -1,11 +1,11 @@
 Option Explicit
 
-Public Declare Function GetTickCount Lib "kernel32.dll" () As Long
+Private Declare Function GetTickCount Lib "kernel32.dll" () As Long
 Private lasttick As Long
+Private testcounter As Long
 
 Sub TestAll()
-
-    Dim emptymat As Variant
+    testcounter = 0
 
     Dim a, b, c, d, e, arr
     a = [{ 1, 4, 7, 10, 13; 2, 5, 8, 11, 14; 3, 6, 9, 12, 15 }]
@@ -16,96 +16,122 @@ Sub TestAll()
     arr = Array(a, b, c, d, e)
     
     Tic
+    Dim i As Long
+    For i = 1 To 10
+    Debug.Assert test("A", "true", True)
+    Debug.Assert test("A", "false", False)
+    Debug.Assert test("A", "42", 42)
+    Debug.Assert test("A", """test string""", "test string")
+    Debug.Assert test("A", "[]", Empty)
+    Debug.Assert test("A", "[1 4 7 10 13]", b)
+    Debug.Assert test("A", "[1; 2; 3]", c)
+    Debug.Assert test("ans", "[]")
+    Debug.Assert test("2+2;ans+1", "5")
     
-    Dim i: For i = 1 To 5
-
-    Debug.Assert Q("isequal(A,B)", Q("true"), True)
-    Debug.Assert Q("isequal(A,B)", Q("false"), False)
-    Debug.Assert Q("isequal(A,B)", Q("42"), 42)
-    Debug.Assert Q("isequal(A,B)", Q("""test string"""), "test string")
+    Debug.Assert test("#[]", "0")
+    Debug.Assert test("[]==[]", "[]")
+    Debug.Assert test("[]>=[]", "[]")
+    Debug.Assert test("[]<=[]", "[]")
+    Debug.Assert test("[]>[]", "[]")
+    Debug.Assert test("[]<[]", "[]")
+    Debug.Assert test("[]<>[]", "[]")
+    Debug.Assert test("[]+3", "[]")
+    Debug.Assert test("3-[]", "[]")
+    Debug.Assert test("[]*3", "[]")
+    Debug.Assert test("any([])", "false")
+    Debug.Assert test("all([])", "true")
+    Debug.Assert test("sum([])", "0")
+    Debug.Assert test("prod([])", "1")
     
-    Debug.Assert Q("isequal(A,B)", Q("[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("#[]"), 0)
-    Debug.Assert Q("isequal(A,B)", Q("[]==[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("[]>=[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("[]<=[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("[]>[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("[]<[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("[]<>[]"), emptymat)
-    Debug.Assert Q("isequal(A,B)", Q("any([])"), False)
-    Debug.Assert Q("isequal(A,B)", Q("all([])"), True)
-    Debug.Assert Q("isequal(A,B)", Q("sum([])"), 0)
-    Debug.Assert Q("isequal(A,B)", Q("prod([])"), 1)
+    Debug.Assert test("17e3", "17 * 1000")
+    Debug.Assert test("17e-3+2", "17 * 0.001 + 2")
+    Debug.Assert test("17.2e2", "1720")
     
-    Debug.Assert Q("isequal(A,B)", Q("17e3"), 17 * 1000)
-    Debug.Assert Q("isequal(A,B)", Q("17e-3+2"), 17 * 0.001 + 2)
-    Debug.Assert Q("isequal(A,B)", Q("17.2e2"), 1720)
-    Debug.Assert Q("isequal(A,B)", Q("A+B+C+D", 1, 2, 3, 4), 10)
-
-    Debug.Assert Q("isequal(A,B)", Q("1(1)"), 1)                                      ' Scalar operators
-    Debug.Assert Q("isequal(A,B)", Q("---1+(+2)"), 1)
-    Debug.Assert Q("isequal(A,B)", Q("16/2/2*3"), Q("16./2./2.*3"))
-    Debug.Assert Q("isequal(A,B)", Q("2^2^3"), Q("2.^2.^3"))
+    Debug.Assert test("1(1)", "1")                                     ' Scalar operators
+    Debug.Assert test("---1+(+2)", "1")
+    Debug.Assert test("16/2/2*3", "16./2./2.*3")
+    Debug.Assert test("2^2^3", "2.^2.^3")
     
-    Debug.Assert Q("isequal(A,B)", Q("17*true"), -17)
-    Debug.Assert Q("isequal(A,B)", Q("rows(A)", a), 3)                                      ' Size, dimension...
-    Debug.Assert Q("isequal(A,B)", Q("rows(A)", a), 3)
-    Debug.Assert Q("isequal(A,B)", Q("rows(42)"), 1)
-    Debug.Assert Q("isequal(A,B)", Q("cols(A)", a), 5)
-    Debug.Assert Q("isequal(A,B)", Q("cols(42)"), 1)
-    Debug.Assert Q("isequal(A,B)", Q("numel(A)", a), 15)
-    Debug.Assert Q("isequal(A,B)", Q("numel(42)"), 1)
-    Debug.Assert Q("isequal(A,B)", Q("size(A)", a), [{ 3, 5 }])
-    Debug.Assert Q("isequal(A,B)", Q("size(42)"), [{ 1, 1 }])
-    Debug.Assert Q("isequal(A,B)", Q("A(1)", a), 1)                                           ' Indexing
-    Debug.Assert Q("isequal(A,B)", Q("A(1,1)", a), 1)
-    Debug.Assert Q("isequal(A,B)", Q("A(2,end)", a), 14)
-    Debug.Assert Q("isequal(A,B)", Q("A(end)", a), 15)
-    Debug.Assert Q("isequal(A,B)", Q("A(:)'", a), Q("1:15"))
-    Debug.Assert Q("isequal(A,B)", Q("A(1,:)", a), Q("1:3:13"))
-    Debug.Assert Q("isequal(A,B)", Q("A(:)", a), Q("(1:15)'"))                              ' Colon operator
-    Debug.Assert Q("isequal(A,B)", Q("A(1:end)", a), Q("(1:15)"))
-    Debug.Assert Q("isequal(A,B)", Q("A(1:3:end)", a), Q("(1:3:15)"))
-    Debug.Assert Q("isequal(A,B)", Q("2+#A*2", a), 32)                                    ' Count operator
+    Debug.Assert test("17*true", "-17")
+    Debug.Assert test("rows(42)", "1")
+    Debug.Assert test("cols(42)", "1")
+    Debug.Assert test("numel(42)", "1")
+    Debug.Assert test("size(42)", "[1 1]")
+    Debug.Assert test("3", "rows(A)", a)                                     ' Size, dimension...
+    Debug.Assert test("5", "cols(A)", a)
+    Debug.Assert test("15", "numel(A)", a)
+    Debug.Assert test("[3 5]", "size(A)", a)
     
-    Debug.Assert Q("isequal(A,B)", Q("inv(2)*2", a), 1)
+    Debug.Assert test("1", "A(1)", a)                                          ' Indexing
+    Debug.Assert test("1", "A(1,1)", a)
+    Debug.Assert test("14", "A(2,end)", a)
+    Debug.Assert test("15", "A(end)", a)
+    Debug.Assert test("1:15", "A(:)'", a)
+    Debug.Assert test("1:3:13", "A(1,:)", a)
+    Debug.Assert test("(1:15)'", "A(:)", a)                            ' Colon operator
+    Debug.Assert test("(1:15)", "A(1:end)", a)
+    Debug.Assert test("(1:3:15)", "A(1:3:end)", a)
+    Debug.Assert test("32", "2+#A*2", a)                                  ' Count operator
+    Debug.Assert test("1", "inv(2)*2")
     
-    Debug.Assert Q("isequal(A,B)", Q("1>2"), False)                                         ' Comparison operators
-    Debug.Assert Q("isequal(A,B)", Q("1>=2"), False)
-    Debug.Assert Q("isequal(A,B)", Q("1<2"), True)
-    Debug.Assert Q("isequal(A,B)", Q("1<=2"), True)
-    Debug.Assert Q("isequal(A,B)", Q("1~=2"), True)
-    Debug.Assert Q("isequal(A,B)", Q("1<>2"), True)
-    Debug.Assert Q("isequal(A,B)", Q("1=2"), False)
-    Debug.Assert Q("isequal(A,B)", Q("1==2"), False)
+    Debug.Assert test("1&&2", "true")
+    Debug.Assert test("1&&0", "false")
+    Debug.Assert test("1||2", "true")
+    Debug.Assert test("0||false", "false")
+    Debug.Assert test("true||eye(4)", "true")
     
-    Debug.Assert Q("isequal(A,B)", Q("sort(A)", a), Q("sort(A, ""descend"")(end:-1:1,:)", a))
-    Debug.Assert Q("isequal(A,B)", Q("((7*A)./(A*7))(1,1)", a), 1)   ' Arithmetic operators
-    Debug.Assert Q("isequal(A,B)", Q("((7+A)-(A+7))(1,1)", a), 0)
-    Debug.Assert Q("isequal(A,B)", Q("A*eye(5)", a), a)
-    Debug.Assert Q("isequal(A,B)", Q("eye(3)*A", a), a)
-    Debug.Assert Q("isequal(A,B)", Q("round(A*inv(A))", Q("randn(3,3)")), Q("eye(3)"))      ' Matrix functions
-    Debug.Assert Q("isequal(A,B)", Q("log(exp(A))", 7), 7)
-    Debug.Assert Q("isequal(A,B)", Q("log(exp(A))", 7), 7)
-    Debug.Assert Q("isequal(A,B)", Q("sqrt(A.^2)", 7), 7)
-    Debug.Assert Q("isequal(A,B)", Q("sum(A)", a), [{ 6, 15, 24, 33, 42 }])
-    Debug.Assert Q("isequal(A,B)", Q("isempty(A)", Empty), True)
-    Debug.Assert Q("isequal(A,B)", Q("isempty(A)", Q("ones(3)")), False)
-    Debug.Assert Q("isequal(A,B)", Q("islogical(true)"), True)
-    Debug.Assert Q("isequal(A,B)", Q("islogical(17)"), False)
-    Debug.Assert Q("isequal(A,B)", Q("islogical(A>10)", a), True)
-    Debug.Assert Q("isequal(A,B)", Q("islogical(A)", a), False)
+    Debug.Assert test("1>2", "false")                                        ' Comparison operators
+    Debug.Assert test("1>=2", "false")
+    Debug.Assert test("1<2", "true")
+    Debug.Assert test("1<=2", "true")
+    Debug.Assert test("1~=2", "true")
+    Debug.Assert test("1<>2", "true")
+    Debug.Assert test("1=2", "false")
+    Debug.Assert test("1==2", "false")
     
-    Dim f: For Each f In Split("zeros,ones,eye,true,false,rand,randn", ",")
-        Debug.Assert test("size(" + f + ")", "[1,1]")
-        Debug.Assert test("size(" + f + "(7))", "[7,7]")
-        Debug.Assert test("size(" + f + "(3,4))", "[3,4]")
-        Debug.Assert test("size(" + f + "([3,4]))", "[3,4]")
-        Debug.Assert test(f + "(0)", "[]")
-        Debug.Assert test(f + "(0,0)", "[]")
-        Debug.Assert test(f + "([0,0])", "[]")
-        Debug.Assert test("all(all(isnum(17*" + f + "(3,4))))", "true")
-    Next f
+    Debug.Assert test("sort(A)", "sort(A, ""descend"")(end:-1:1,:)", a)
+    Debug.Assert test("1", "((7*A)./(A*7))(1,1)", a)  ' Arithmetic operators
+    Debug.Assert test("0", "((7+A)-(A+7))(1,1)", a)
+    Debug.Assert test("A", "A*eye(5)", a)
+    Debug.Assert test("A", "eye(3)*A", a)
+    Debug.Assert test("eye(3)", "round(A*inv(A))", Q("randn(3,3)"))     ' Matrix functions
+    Debug.Assert test("7", "log(exp(A))", 7)
+    Debug.Assert test("7", "log(exp(A))", 7)
+    Debug.Assert test("7", "sqrt(A.^2)", 7)
+    Debug.Assert test("[ 6, 15, 24, 33, 42 ]", "sum(A)", a)
+    Debug.Assert test("true", "isempty([])")
+    Debug.Assert test("false", "isempty(ones(3))")
+    Debug.Assert test("true", "islogical(true)")
+    Debug.Assert test("false", "islogical(17)")
+    Debug.Assert test("true", "islogical(A>10)", a)
+    Debug.Assert test("false", "islogical(A)", a)
+    
+    Dim fun
+    For Each fun In Split("zeros,ones,eye,true,false,rand,randn", ",")
+        Debug.Assert test("size(" + fun + ")", "[1,1]")
+        Debug.Assert test("size(" + fun + "(7))", "[7,7]")
+        Debug.Assert test("size(" + fun + "(3,4))", "[3,4]")
+        Debug.Assert test("size(" + fun + "([3,4]))", "[3,4]")
+        Debug.Assert test(fun + "(0)", "[]")
+        Debug.Assert test(fun + "(0,0)", "[]")
+        Debug.Assert test(fun + "([0,0])", "[]")
+        Debug.Assert test("all(all(isnum(17*" + fun + "(3,4))))", "true")
+    Next fun
+    
+    For Each fun In Split("zeros,ones,true,false", ",")
+        Debug.Assert test("unique(" + fun + "(2,3))", CStr(fun))
+    Next fun
+    Debug.Assert test("unique(repmat(""hello"", 4,5))", """hello""")
+    
+    ' Error testing - expression must result in error
+    Debug.Assert testerror("[](1)")
+    Debug.Assert testerror("1(2)")
+    Debug.Assert testerror("zeros(2)+ones(3)")
+    Debug.Assert testerror("false(4)-true(5)")
+    Debug.Assert testerror("2(")
+    Debug.Assert testerror("2+(")
+    Debug.Assert testerror("true&&eye(2)")
+    Debug.Assert testerror("false||ones(2)")
     
     Dim arrItem: For Each arrItem In arr
         Debug.Assert test("A([])", "[]", arrItem)
@@ -176,6 +202,10 @@ Sub TestAll()
         Debug.Assert test("repmat(A,0,3)", "[]", arrItem)
         Debug.Assert test("repmat(A,3,0)", "[]", arrItem)
         
+        Debug.Assert test("repmat(A,1,3)", "[A A A]", arrItem)
+        Debug.Assert test("repmat(A,3,1)", "[A; A; A]", arrItem)
+        Debug.Assert test("repmat(A,2,3)", "[A A A; A A A]", arrItem)
+        
         Debug.Assert test("sum(sum(A))", "sum(A(:))", arrItem)
         Debug.Assert test("prod(prod(A))", "prod(A(:))", arrItem)
         Debug.Assert test("max(max(A))", "max(A(:))", arrItem)
@@ -198,15 +228,25 @@ Sub TestAll()
         Debug.Assert test("max(A,,2)", "-min(-A,,2)", arrItem)
         
         Debug.Assert test("#cov(A)", "cols(A)^2", arrItem)
+        
+        ' Error testing - expression must result in error
+        Debug.Assert testerror("A(#A+1)", arrItem)
+        Debug.Assert testerror("A(0)", arrItem)
+        Debug.Assert testerror("A(-1)", arrItem)
+        Debug.Assert testerror("A(999999)", arrItem)
+        Debug.Assert testerror("A(1,0)", arrItem)
+        Debug.Assert testerror("A(-1,1)", arrItem)
+        Debug.Assert testerror("A")
+        Debug.Assert testerror("A+B", 3)
+        
     Next arrItem
-    
     Next i
-    
     Toc
-    
+    Debug.Print "#tests = " & testcounter / (i - 1)
 End Sub
 
 Function test(code1 As String, code2 As String, Optional item As Variant) As Boolean
+    testcounter = testcounter + 1
     Dim r1 As Variant, r2 As Variant
     If IsMissing(item) Then
         r1 = Q(code1)
@@ -216,6 +256,19 @@ Function test(code1 As String, code2 As String, Optional item As Variant) As Boo
         r2 = Q(code2, item)
     End If
     test = Q("isequal(A,B)", r1, r2)
+End Function
+
+Function testerror(code, Optional item As Variant) As Boolean
+    testcounter = testcounter + 1
+    On Error GoTo FoundError
+    If IsMissing(item) Then
+        Q code
+    Else
+        Q code, item
+    End If
+    Exit Function
+FoundError:
+    testerror = True
 End Function
 
 Sub Tic()

@@ -39,7 +39,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.11"
+Private Const VERSION = "2.12"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -669,6 +669,7 @@ Private Function calc_tree(root As Variant) As Variant
         Case "cumprod": calc_tree = fn_cumprod(root(2))
         Case "cumsum": calc_tree = fn_cumsum(root(2))
         Case "diag": calc_tree = fn_diag(root(2))
+        Case "diff": calc_tree = fn_diff(root(2))
         Case "e": calc_tree = fn_e(root(2))
         Case "exp": calc_tree = fn_exp(root(2))
         Case "expand": calc_tree = fn_expand(root(2))
@@ -2502,7 +2503,7 @@ Private Function fn_expand(args As Variant) As Variant
         If IsEmpty(cell.Offset(1, 0)) Then
             rows = 1
         Else
-            rows = cell.End(xlDown).Row - cell.Row + 1
+            rows = cell.End(xlDown).row - cell.row + 1
         End If
     ElseIf rows <= 0 Then
         Exit Function

@@ -39,7 +39,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.12"
+Private Const VERSION = "2.13"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -637,6 +637,7 @@ Private Function calc_tree(root As Variant) As Variant
         Case "lt": calc_tree = op_lt(root(2))
         Case "lte": calc_tree = op_lte(root(2))
         Case "minus": calc_tree = op_minus(root(2))
+        Case "mdivide": calc_tree = op_mdivide(root(2))
         Case "mpower": calc_tree = op_mpower(root(2))
         Case "mtimes": calc_tree = op_mtimes(root(2))
         Case "ne": calc_tree = op_ne(root(2))
@@ -2503,7 +2504,7 @@ Private Function fn_expand(args As Variant) As Variant
         If IsEmpty(cell.Offset(1, 0)) Then
             rows = 1
         Else
-            rows = cell.End(xlDown).row - cell.row + 1
+            rows = cell.End(xlDown).Row - cell.Row + 1
         End If
     ElseIf rows <= 0 Then
         Exit Function

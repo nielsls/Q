@@ -18,6 +18,7 @@ Sub TestAll()
     Tic
     Dim i As Long
     For i = 1 To 10
+    
     Debug.Assert test("A", "true", True)
     Debug.Assert test("A", "false", False)
     Debug.Assert test("A", "42", 42)
@@ -88,6 +89,11 @@ Sub TestAll()
     Debug.Assert test("1<>2", "true")
     Debug.Assert test("1=2", "false")
     Debug.Assert test("1==2", "false")
+    
+    Debug.Assert test("2+3", 5)
+    Debug.Assert test("2-3", -1)
+    Debug.Assert test("2*3", 6)
+    Debug.Assert test("8/4", 2)
     
     Debug.Assert test("sort(A)", "sort(A, ""descend"")(end:-1:1,:)", a)
     Debug.Assert test("1", "((7*A)./(A*7))(1,1)", a)  ' Arithmetic operators

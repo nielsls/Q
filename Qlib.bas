@@ -39,7 +39,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.13"
+Private Const VERSION = "2.14"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -95,7 +95,8 @@ Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     Exit Function
     
 ErrorHandler:
-    ' Only raise an error if Q was called from VBA and not a cell.
+    ' If Q was called from cell, fail silently with an error msg.
+    ' Else, raise a new error.
     Utils_Assert _
         Utils_WasCalledFromCell(), _
         Err.Description & " in """ & expression & """"
@@ -285,21 +286,16 @@ Private Function Parse_Postfix() As Variant
     Parse_Postfix = Parse_Atomic
     Dim op: Do
         If Parse_FindUnaryPostfixOp(currentToken, op) Then
-            Parse_Postfix = Array("op_" & op, Array(Parse_Postfix))
             Tokens_Next
+            Parse_Postfix = Array("op_" & op, Array(Parse_Postfix))
         ElseIf currentToken = "(" Then
             Tokens_Next
-            Parse_Postfix = Array("eval_index", Array(Parse_Postfix, Parse_List()))
+            Parse_Postfix = Array("op_index", Array(Parse_Postfix, Parse_List()))
             Tokens_AssertAndNext ")"
         Else
             Exit Do
         End If
     Loop While True
-End Function
-
-Private Function Utils_ToMatrix(val As Variant) As Variant
-    Utils_ToMatrix = val
-    Utils_Conform Utils_ToMatrix
 End Function
 
 Private Function Parse_Atomic() As Variant
@@ -344,7 +340,7 @@ Private Function Parse_Atomic() As Variant
             
         Case Asc("[")  ' Found a matrix concatenation
             Tokens_Next
-            Parse_Atomic = Array("eval_concat", Parse_Matrix())
+            Parse_Atomic = Array("op_concat", Parse_Matrix())
             Tokens_AssertAndNext "]"
             
         Case Asc("""") ' Found a string constant
@@ -419,6 +415,11 @@ Private Sub Utils_Ind2Sub(rows As Long, ind As Long, ByRef i As Long, ByRef j As
     j = (ind - 1) \ rows + 1
     i = ind - rows * (j - 1)
 End Sub
+
+Private Function Utils_ToMatrix(val As Variant) As Variant
+    Utils_ToMatrix = val
+    Utils_Conform Utils_ToMatrix
+End Function
 
 ' Makes sure that a scalar is transformed to a 1x1 matrix
 ' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
@@ -592,7 +593,7 @@ End Sub
 
 ' calc_tree is responsible for turning the
 ' abstract syntax tree (AST) into an actual
-' statement.
+' result.
 ' It does this by recursively calling the
 ' different functions and operators needed.
 '
@@ -601,8 +602,8 @@ End Sub
 ' A more elegant solution would be to just
 ' invoke Application.Run().
 ' However, Application.Run is not feasible
-' as it is slow and fucks up error propaga-
-' tion.
+' as it is both slow and fucks up error
+' propagation.
 Private Function calc_tree(root As Variant) As Variant
     Dim prefix As String, name As String
     root(1) = Split(root(1), "_")
@@ -614,13 +615,19 @@ Private Function calc_tree(root As Variant) As Variant
     ' Non-functions
     Case "eval":
         Select Case name
-        Case "constant": calc_tree = root(2)
-        Case "variable": calc_tree = eval_variable(root(2))
-        Case "index": calc_tree = eval_index(root(2))
-        Case "end": calc_tree = eval_end()
-        Case "concat": calc_tree = eval_concat(root(2))
-        Case "ans": calc_tree = ans
-        Case "colon": Utils_Assert False, "colon not allowed here"
+        Case "constant":
+            calc_tree = root(2)
+        Case "variable":
+            Utils_Assert root(2) <= UBound(arguments), "variable '" & Chr(Asc("A") + root(2)) & "' not found."
+            calc_tree = CVar(arguments(root(2)))
+            Utils_Conform calc_tree
+        Case "end":
+            Utils_Assert Utils_Stack_Size(endValues) > 0, """end"" not allowed here."
+            calc_tree = Utils_ToMatrix(Utils_Stack_Peek(endValues))
+        Case "ans":
+            calc_tree = ans
+        Case "colon":
+            Utils_Assert False, "colon not allowed here"
         End Select
        
     ' Operators
@@ -629,11 +636,13 @@ Private Function calc_tree(root As Variant) As Variant
         Case "and": calc_tree = op_and(root(2))
         Case "andshortcircuit": calc_tree = op_andshortcircuit(root(2))
         Case "colon": calc_tree = op_colon(root(2))
+        Case "concat": calc_tree = op_concat(root(2))
         Case "divide": calc_tree = op_divide(root(2))
         Case "eq": calc_tree = op_eq(root(2))
         Case "extern": calc_tree = op_extern(root(2))
         Case "gt": calc_tree = op_gt(root(2))
         Case "gte": calc_tree = op_gte(root(2))
+        Case "index": calc_tree = op_index(root(2))
         Case "lt": calc_tree = op_lt(root(2))
         Case "lte": calc_tree = op_lte(root(2))
         Case "minus": calc_tree = op_minus(root(2))
@@ -703,6 +712,7 @@ Private Function calc_tree(root As Variant) As Variant
         Case "randi": calc_tree = fn_randi(root(2))
         Case "randn": calc_tree = fn_randn(root(2))
         Case "repmat": calc_tree = fn_repmat(root(2))
+        Case "ret2tick": calc_tree = fn_ret2tick(root(2))
         Case "reshape": calc_tree = fn_reshape(root(2))
         Case "round": calc_tree = fn_round(root(2))
         Case "rows": calc_tree = fn_rows(root(2))
@@ -733,22 +743,12 @@ End Function
 '*** EVAL FUNCTIONS ***
 '**********************
 
-Private Function eval_variable(args As Variant) As Variant
-    Utils_Assert args <= UBound(arguments), "variable '" & Chr(Asc("A") + args) & "' not found."
-    eval_variable = CVar(arguments(args))
-    Utils_Conform eval_variable
-End Function
-
-Private Function eval_end() As Variant
-    Utils_Assert Utils_Stack_Size(endValues) > 0, """end"" not allowed here."
-    eval_end = Utils_ToMatrix(Utils_Stack_Peek(endValues))
-End Function
-
 Private Function Utils_IsVectorShape(r As Long, c As Long) As Boolean
     Utils_IsVectorShape = (r = 1 And c > 1) Or (r > 1 And c = 1)
 End Function
 
-Private Function eval_indexarg(root As Variant, endValue As Long, idx As Variant, r As Long, c As Long, t As Long) As Variant
+' helper function for op_index
+Private Sub op_indexarg(root As Variant, endValue As Long, ByRef idx As Variant, ByRef r As Long, ByRef c As Long, ByRef t As Long)
     If root(1) = "eval_colon" Then
         t = 1
         r = endValue
@@ -779,17 +779,17 @@ Private Function eval_indexarg(root As Variant, endValue As Long, idx As Variant
         Dim i As Long, j As Long
         For i = 1 To r
             For j = 1 To c
-                If Not WorksheetFunction.IsLogical(idx(i, j)) Then Exit Function
+                If Not WorksheetFunction.IsLogical(idx(i, j)) Then Exit Sub
             Next j
         Next i
         idx = fn_find(Array(idx))
         Utils_Size idx, r, c
         
     End If
-End Function
+End Sub
 
 ' Evaluates matrix indexing/subsetting
-Private Function eval_index(args As Variant) As Variant
+Private Function op_index(args As Variant) As Variant
     Dim out As Variant, out_i As Long, out_j As Long
     Dim arg_r As Long, arg_c As Long
     Dim arg_i As Long, arg_j As Long
@@ -808,7 +808,7 @@ Private Function eval_index(args As Variant) As Variant
             out = args(1)
         
         Case 1:
-            eval_indexarg args(2)(1), arg_r * arg_c, idx1, idx1_r, idx1_c, t1
+            op_indexarg args(2)(1), arg_r * arg_c, idx1, idx1_r, idx1_c, t1
             If idx1_r * idx1_c = 0 Then Exit Function
             If Utils_IsVectorShape(idx1_r, idx1_c) And Utils_IsVectorShape(arg_r, arg_c) Then
                 If arg_r > 1 Or t1 = 1 Then ReDim out(idx1_r * idx1_c, 1) Else ReDim out(1, idx1_r * idx1_c)
@@ -828,8 +828,8 @@ Private Function eval_index(args As Variant) As Variant
             Next k
             
         Case 2:
-            eval_indexarg args(2)(1), arg_r, idx1, idx1_r, idx1_c, t1
-            eval_indexarg args(2)(2), arg_c, idx2, idx2_r, idx2_c, t2
+            op_indexarg args(2)(1), arg_r, idx1, idx1_r, idx1_c, t1
+            op_indexarg args(2)(2), arg_c, idx2, idx2_r, idx2_c, t2
             If idx1_r * idx1_c = 0 Or idx2_r * idx2_c = 0 Then Exit Function
             ReDim out(idx1_r * idx1_c, idx2_r * idx2_c)
             For out_i = 1 To UBound(out, 1)
@@ -855,11 +855,11 @@ Private Function eval_index(args As Variant) As Variant
     
     End Select
 
-    eval_index = out
+    op_index = out
 End Function
 
 ' Evaluates matrix concatenation []
-Private Function eval_concat(args As Variant) As Variant
+Private Function op_concat(args As Variant) As Variant
 
     ' Get matrices and check their sizes are compatible for concatenation
     Dim totalRows As Long, totalCols As Long
@@ -911,7 +911,7 @@ Private Function eval_concat(args As Variant) As Variant
         Next j
         totalRows = totalRows + rows
     Next i
-    eval_concat = r
+    op_concat = r
 
 End Function
 
@@ -964,14 +964,14 @@ End Function
 Private Function op_andshortcircuit(args As Variant) As Variant
     args(1) = calc_tree(args(1))
     Utils_Assert Utils_Numel(args(1)) = 1, "&&: 1st argument must be scalar"
-    'On Error GoTo ErrorHandler
+    On Error GoTo ErrorHandler
     If Not CBool(args(1)(1, 1)) Then
         op_andshortcircuit = Utils_ToMatrix(False)
     Else
-     '   On Error GoTo 0
+        On Error GoTo 0
         args(2) = calc_tree(args(2))
         Utils_Assert Utils_Numel(args(2)) = 1, "&&: 2nd argument must be scalar"
-      '  On Error GoTo ErrorHandler
+        On Error GoTo ErrorHandler
         op_andshortcircuit = Utils_ToMatrix(CBool(args(2)(1, 1)))
     End If
     Exit Function
@@ -1643,24 +1643,41 @@ Private Function fn_xor(args As Variant) As Variant
 End Function
 
 ' X = tick2ret(A)
-' X = tick2ret(A,method)
-' X = tick2ret(A,method,dim)
+' X = tick2ret(A,dim)
+'
+' Returns simple percentage returns
 Private Function fn_tick2ret(args As Variant) As Variant
-    Utils_AssertArgsCount args, 1, 3
-    Dim x As Long: x = Utils_CalcDimDirection(args, 3)
-    Dim simple As Boolean: simple = Not Utils_IsFlagSet(args, "continuous")
+    Utils_AssertArgsCount args, 1, 2
+    Dim x As Long: x = Utils_CalcDimDirection(args, 2)
     Dim r: ReDim r(UBound(args(1), 1) - (1 - x), UBound(args(1), 2) - x)
     Dim i As Long, j As Long
     For i = 1 To UBound(r, 1)
         For j = 1 To UBound(r, 2)
-            If simple Then
-                r(i, j) = args(1)(i + (1 - x), j + x) / args(1)(i, j) - 1
-            Else
-                r(i, j) = Log(args(1)(i + (1 - x), j + x) / args(1)(i, j))
-            End If
+            r(i, j) = args(1)(i + (1 - x), j + x) / args(1)(i, j) - 1
         Next j
     Next i
     fn_tick2ret = r
+End Function
+
+' X = ret2tick(A)
+' X = ret2tick(A,dim)
+'
+' Creates timeseries from simple percentage returns.
+' New base is 100
+Private Function fn_ret2tick(args As Variant) As Variant
+    Utils_AssertArgsCount args, 1, 2
+    Dim x As Long: x = Utils_CalcDimDirection(args, 2)
+    Dim r: ReDim r(UBound(args(1), 1) + (1 - x), UBound(args(1), 2) + x)
+    Dim i As Long, j As Long
+    For j = 1 To UBound(r, 2 - x)
+        r(1 * (1 - x) + j * x, j * (1 - x) + 1 * x) = 100
+    Next j
+    For i = 2 - x To UBound(r, 1)
+        For j = 1 + x To UBound(r, 2)
+            r(i, j) = r(i - (1 - x), j - x) * (1 + args(1)(i - (1 - x), j - x))
+        Next j
+    Next i
+    fn_ret2tick = r
 End Function
 
 ' B = cumsum(A)

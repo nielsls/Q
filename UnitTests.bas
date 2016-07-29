@@ -139,6 +139,9 @@ Sub TestAll()
     Debug.Assert testerror("true&&eye(2)")
     Debug.Assert testerror("false||ones(2)")
     
+    Debug.Assert test("true", "sum(sum((A-tick2ret(ret2tick(A))).^2))<0.00001", Q("randn(5,4)"))
+    Debug.Assert test("true", "sum(sum((A-tick2ret(ret2tick(A,2),2)).^2))<0.00001", Q("randn(2,7)"))
+    
     Dim arrItem: For Each arrItem In arr
         Debug.Assert test("A([])", "[]", arrItem)
         Debug.Assert test("A(:)", "reshape(A(1:end),#A,,)", arrItem)
@@ -234,6 +237,7 @@ Sub TestAll()
         Debug.Assert test("max(A,,2)", "-min(-A,,2)", arrItem)
         
         Debug.Assert test("#cov(A)", "cols(A)^2", arrItem)
+        
         
         ' Error testing - expression must result in error
         Debug.Assert testerror("A(#A+1)", arrItem)

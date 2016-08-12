@@ -1,4 +1,3 @@
-
 '*******************************************************************
 ' Q - A MATLAB-like matrix parser for Microsoft Excel
 '
@@ -283,7 +282,7 @@ Private Function Parse_Prefix() As Variant
 End Function
 
 Private Function Parse_Postfix() As Variant
-    Parse_Postfix = Parse_Atomic
+    Parse_Postfix = Parse_Atomic()
     Dim op: Do
         If Parse_FindUnaryPostfixOp(currentToken, op) Then
             Tokens_Next
@@ -747,7 +746,6 @@ Private Function Utils_IsVectorShape(r As Long, c As Long) As Boolean
     Utils_IsVectorShape = (r = 1 And c > 1) Or (r > 1 And c = 1)
 End Function
 
-' helper function for op_index
 Private Sub op_indexarg(root As Variant, endValue As Long, ByRef idx As Variant, ByRef r As Long, ByRef c As Long, ByRef t As Long)
     If root(1) = "eval_colon" Then
         t = 1
@@ -2518,22 +2516,24 @@ Private Function fn_expand(args As Variant) As Variant
     Dim rows As Variant: If UBound(args) > 1 Then rows = calc_tree(args(2))
     Dim cols As Variant: If UBound(args) > 2 Then cols = calc_tree(args(3))
     If IsEmpty(rows) Then
-        If IsEmpty(cell.Offset(1, 0)) Then
+        If IsEmpty(cell.offset(1, 0)) Then
             rows = 1
         Else
             rows = cell.End(xlDown).Row - cell.Row + 1
         End If
-    ElseIf rows <= 0 Then
-        Exit Function
+    Else
+        rows = rows(1, 1)
+        If rows <= 0 Then Exit Function
     End If
     If IsEmpty(cols) Then
-        If IsEmpty(cell.Offset(0, 1)) Then
+        If IsEmpty(cell.offset(0, 1)) Then
             cols = 1
         Else
             cols = cell.End(xlToRight).Column - cell.Column + 1
         End If
-    ElseIf cols <= 0 Then
-        Exit Function
+    Else
+        cols = cols(1, 1)
+        If cols <= 0 Then Exit Function
     End If
     fn_expand = cell.Resize(rows, cols)
     Utils_Conform fn_expand

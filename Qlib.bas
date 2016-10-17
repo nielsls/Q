@@ -38,7 +38,7 @@
 Option Explicit
 Option Base 1
 
-Private Const VERSION = "2.15"
+Private Const VERSION = "2.16"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -535,11 +535,11 @@ Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m
 End Function
 
 ' Easy way of obtaining the value of an optional argument
-Private Function Utils_GetOptionalArg(args As Variant, index As Long, defaultValue As Variant)
+Private Function Utils_GetOptionalScalarArg(args As Variant, index As Long, defaultValue As Variant)
     If index <= Utils_Stack_Size(args) Then
-        Utils_GetOptionalArg = args(index)
+        Utils_GetOptionalScalarArg = args(index)(1, 1)
     Else
-        Utils_GetOptionalArg = defaultValue
+        Utils_GetOptionalScalarArg = defaultValue
     End If
 End Function
 
@@ -696,6 +696,7 @@ Private Function calc_tree(root As Variant) As Variant
         Case "islogical": calc_tree = fn_islogical(root(2))
         Case "isnum": calc_tree = fn_isnum(root(2))
         Case "join": calc_tree = fn_join(root(2))
+        Case "linspace": calc_tree = fn_linspace(root(2))
         Case "log": calc_tree = fn_log(root(2))
         Case "max": calc_tree = fn_max(root(2))
         Case "mean": calc_tree = fn_mean(root(2))
@@ -1427,7 +1428,7 @@ End Function
 ' X = round(A,k) rounds the elements of A with k decimal places. Default is 0
 Private Function fn_round(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 2
-    Dim k As Long: k = Utils_GetOptionalArg(args, 2, 0)
+    Dim k As Long: k = Utils_GetOptionalScalarArg(args, 2, 0)
     Dim r As Long, c As Long, i As Long, j As Long
     Utils_Size args(1), r, c
     With WorksheetFunction
@@ -1623,6 +1624,24 @@ Private Function fn_false(args As Variant) As Variant
     Dim n As Long, m As Long
     Utils_GetSizeFromArgs args, n, m, 1
     Utils_RepScalar fn_false, False, n, m
+End Function
+
+' X = linspace(x1,x2)
+' X = linspace(x1,x2,n)
+'
+' linspace(x1,x2) returns a row vector of 100 evenly spaced points between x1 and x2
+' linspace(x1,x2,n) returns n points with spacing (x2-x1)/(n-1).
+Private Function fn_linspace(args As Variant) As Variant
+    Utils_AssertArgsCount args, 2, 3
+    Dim out, n As Long, i As Long, x1 As Double, x2 As Double
+    x1 = args(1)(1, 1)
+    x2 = args(2)(1, 1)
+    n = Utils_GetOptionalScalarArg(args, 3, 100)
+    ReDim out(1 To 1, 1 To n)
+    For i = 1 To n
+        out(1, i) = x1 + (x2 - x1) / (n - 1) * (i - 1)
+    Next i
+    fn_linspace = out
 End Function
 
 ' X = xor(A,B)
@@ -2301,7 +2320,7 @@ Private Function fn_diff(args As Variant) As Variant
         Next j
     Next i
     fn_diff = r
-    Dim n As Long: n = Utils_GetOptionalArg(args, 2, 1)
+    Dim n As Long: n = Utils_GetOptionalScalarArg(args, 2, 1)
     If n > 1 Then fn_diff = fn_diff(Array(r, n - 1, 1 + x))
 End Function
 
@@ -2482,7 +2501,7 @@ Private Function fn_join(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 3
     Dim i As Long, j As Long, x As Long, r_i As Long, r_j As Long, joiner As String
     x = Utils_CalcDimDirection(args, 3)
-    joiner = Utils_GetOptionalArg(args, 2, "")
+    joiner = Utils_GetOptionalScalarArg(args, 2, "")
     Dim r: ReDim r(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
     For i = 1 To UBound(args(1), 1)
         For j = 1 To UBound(args(1), 2)
@@ -2516,7 +2535,7 @@ Private Function fn_expand(args As Variant) As Variant
     Dim rows As Variant: If UBound(args) > 1 Then rows = calc_tree(args(2))
     Dim cols As Variant: If UBound(args) > 2 Then cols = calc_tree(args(3))
     If IsEmpty(rows) Then
-        If IsEmpty(cell.offset(1, 0)) Then
+        If IsEmpty(cell.Offset(1, 0)) Then
             rows = 1
         Else
             rows = cell.End(xlDown).Row - cell.Row + 1
@@ -2526,7 +2545,7 @@ Private Function fn_expand(args As Variant) As Variant
         If rows <= 0 Then Exit Function
     End If
     If IsEmpty(cols) Then
-        If IsEmpty(cell.offset(0, 1)) Then
+        If IsEmpty(cell.Offset(0, 1)) Then
             cols = 1
         Else
             cols = cell.End(xlToRight).Column - cell.Column + 1

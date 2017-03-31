@@ -33,7 +33,7 @@
 ' For the newest version, go to:
 ' http://github.com/nielsls/Q
 '
-' 2017, Niels Lykke Sørensen
+' 2017, Niels Lykke SÃ¸rensen
 
 Option Explicit
 Option Base 1

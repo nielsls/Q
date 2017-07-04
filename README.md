@@ -24,6 +24,7 @@ Example usage
 
 Features
 -------------------
+
   - All standard operators: :,::,+,-,\*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,\~,'
   - Most used functions: <i>eye,zeros,ones,sum,cumsum,cumprod,prod,
     mean,median,prctile,std,isequal,fix,rand,randn,repmat,reshape,find,sort,sqrt,exp,inv</i>...

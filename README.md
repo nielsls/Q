@@ -41,4 +41,4 @@ How to use
 4. Copy-paste the contents of [Qlib.bas](https://raw.githubusercontent.com/nielsls/Q/master/Qlib.bas) to your new module
 5. Well done! Go test in Excel by typing `=Q("2+2")` in a cell
 
-2016, Niels Lykke Sørensen
+2017, Niels Lykke Sørensen

@@ -24,8 +24,7 @@ Example usage
 
 Features
 -------------------
-Test
-  * All standard operators: `:,::,+,-,\*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,\~,'`
+  * All standard operator
   * Most used functions: <i>eye,zeros,ones,sum,cumsum,cumprod,prod,
     mean,median,prctile,std,isequal,fix,rand,randn,repmat,reshape,find,sort,sqrt,exp,inv</i>...
   * Indexing via e.g. `A(2,:)` or `A(5,3:end)`

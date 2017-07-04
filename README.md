@@ -7,7 +7,8 @@ Q is a small, easy-to-use VBA library featuring a single public function, Q(), c
 Q() is able to parse and evaluate a subset of the MATLAB programming language.
 It features almost all MATLAB operators, selected standard functions and has complete support for submatrices, '( )', and concatenation, '[ ]'.
 
-###Example usage
+Example usage
+--------------------
  Formula | Result 
 ---------|--------
 `=Q("2+2")` | 4 

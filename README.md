@@ -31,7 +31,7 @@ Features
 * Indexing via e.g. `A(2,:)` or `A(5,3:end)`
 * Concatenate matrices with '[ ]', i.e. `[ A B; C D ]`
 * Multiple expressions separated by ";" or a line break.
-* Excel functions: <i>if,iferror</i>
+* Excel functions: `if,iferror`
 * Prefix function calls with ! to call external VBA functions not found in Q.
 
 How to use

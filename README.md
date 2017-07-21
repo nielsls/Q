@@ -1,9 +1,9 @@
 # Q 
 
 ### Use MATLAB syntax in Excel
-Q is a small, easy-to-use VBA library featuring a single public function, Q().
+Q is a small, easy-to-use VBA library featuring a single public function, Q().<br/>
 Q() is able to parse and evaluate a subset of the MATLAB programming language.
-It features almost all MATLAB operators, selected standard functions and has complete support for submatrices, '( )', and concatenation, '[ ]'.
+It features almost all MATLAB operators, selected standard functions and has complete support for matrix indexing, '( )', and concatenation, '[ ]'.
 
 MATLAB is NOT required and there are no external dependencies. 
 

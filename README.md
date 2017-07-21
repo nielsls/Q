@@ -1,17 +1,13 @@
-Q 
-==== 
+# Q 
 
-Use MATLAB syntax in Excel
--------------------
-
-Q is a small, easy-to-use VBA library featuring a single public function, Q(), containing an expression parser.
+### Use MATLAB syntax in Excel
+Q is a small, easy-to-use VBA library featuring a single public function, Q().
 Q() is able to parse and evaluate a subset of the MATLAB programming language.
 It features almost all MATLAB operators, selected standard functions and has complete support for submatrices, '( )', and concatenation, '[ ]'.
 
 MATLAB is NOT required and there are no external dependencies. 
 
-Example usage
---------------------
+### Example usage
  Formula | Result 
 ---------|--------
 `=Q("2+2")` | 4 
@@ -24,8 +20,7 @@ Example usage
 `=Q("sort(A)",A1:D5)` | Sort each column of cells A1:D5
 `=Q("3+4;ans^2")` | 49<br />Multiple expressions are separated by ";" or a line break. <br />Variable "ans" always contains the previous result.
 
-Features
--------------------
+### Features
 * All standard operators: `: + - * / ^ .* ./ .^ || && | & < <= > >= == ~=` 
 * Most used functions: `eye,zeros,ones,sum,cumsum,cumprod,prod,mean,median,prctile, std,isequal,fix,rand,randn,repmat,reshape,find,sort,sqrt,exp,inv...`
 * Indexing via e.g. `A(2,:)` or `A(5,3:end)`
@@ -34,8 +29,7 @@ Features
 * Excel functions: `if,iferror`
 * Prefix function calls with ! to call external VBA functions not found in Q.
 
-How to use
--------------------
+### How to use
 1. Open up Excel
 2. Press Alt+F11 to open the VBA editor
 3. Choose Insert -> Module

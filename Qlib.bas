@@ -108,14 +108,8 @@ End Function
 
 '*******************************************************************
 ' Evaluator invariants:
-'   - All variables must be either:
-'       - 0-dim values such as scalars, strings, booleans, dates...
-'       - 2-dim Variant representing row vectors, column vectors
-'         and matrices
-'       - 1-dim array representing sequences such as 1:2:10.
-'         The array must have exactly 3 entries (start,step,stop)
-'     Vectors must be 2-dim objects. Only sequences can be 1-dim.
-'   - All vectors and matrices are 1-based just as in MATLAB.
+'   - All variables must internally be 2-dimensional
+'   - All matrices (and thus all variables) are 1-based just as in MATLAB.
 '   - Variable names: [A-Z]
 '   - Function names: [a-z][a-z0-9_]*
 '   - Numbers support e/E exponent

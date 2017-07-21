@@ -105,9 +105,23 @@ End Function
 Private Function Utils_WasCalledFromCell() As Boolean
     Utils_WasCalledFromCell = TypeName(Application.Caller) <> "Error"
 End Function
-
+            
 '*******************************************************************
-' Evaluator invariants:
+' This file consists of several parts:
+' 1) The lexer; functions prefixed with "Tokens_"
+'    Splits the input expression into its atomic parts
+' 2) The parser; functions prefixed with "Parse_"
+'    Parses the individual parts and builds an Abstract Syntax Tree
+' 3) A set of utilities; functions prefixed with "Utils_"
+' 4) The calc_tree() function; turns the AST into its final output value
+' 5) Operators; functions prefixed with "op_"
+'    Each operator has its own function
+' 6) Built-in functions; functions prefixed with "fn_"
+'    Each function has its own function (surprise!)
+'*******************************************************************
+            
+'*******************************************************************
+' RULES/INVARIANTS:
 '   - All variables must internally be 2-dimensional
 '   - All matrices (and thus all variables) are 1-based just as in MATLAB.
 '   - Variable names: [A-Z]
@@ -119,9 +133,9 @@ End Function
 '     Missing parameters in function calls are given the value Empty
 '*******************************************************************
 
-'*********************
-'*** TOKEN CONTROL ***
-'*********************
+'*************
+'*** LEXER ***
+'*************
 
 Private Sub Tokens_Next()
     previousTokenIsSpace = Tokens_MoveCharPointer(" ")
@@ -182,6 +196,10 @@ Private Function Tokens_MoveCharPointer(str As String, _
         If singleCharOnly Then Exit Function
     Wend
 End Function
+                                                         
+'**************
+'*** PARSER ***
+'**************
 
 'Returns true if token is a suitable operator
 Private Function Parse_FindBinaryOp(Token As String, ByRef op As Variant) As Boolean
@@ -403,7 +421,7 @@ Private Sub Utils_Size(v As Variant, ByRef r As Variant, ByRef c As Variant)
     End If
 End Sub
 
-' From linear index to subscripts in a column-major matrix
+' From 1-dim linear index to 2-dim subscripts in a column-major matrix
 Private Sub Utils_Ind2Sub(rows As Long, ind As Long, ByRef i As Long, ByRef j As Long)
     j = (ind - 1) \ rows + 1
     i = ind - rows * (j - 1)
@@ -581,7 +599,7 @@ Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "unknown erro
 End Sub
 
 '*****************
-'*** CALC ROOT ***
+'*** CALC TREE ***
 '*****************
 
 ' calc_tree is responsible for turning the
@@ -734,9 +752,9 @@ Private Function calc_tree(root As Variant) As Variant
     End Select
 End Function
 
-'**********************
-'*** EVAL FUNCTIONS ***
-'**********************
+'*****************
+'*** OPERATORS ***
+'*****************
 
 Private Function Utils_IsVectorShape(r As Long, c As Long) As Boolean
     Utils_IsVectorShape = (r = 1 And c > 1) Or (r > 1 And c = 1)
@@ -782,7 +800,7 @@ Private Sub op_indexarg(root As Variant, endValue As Long, ByRef idx As Variant,
     End If
 End Sub
 
-' Evaluates matrix indexing/subsetting
+' Evaluates matrix indexing/subsetting, ()
 Private Function op_index(args As Variant) As Variant
     Dim out As Variant, out_i As Long, out_j As Long
     Dim arg_r As Long, arg_c As Long
@@ -908,10 +926,6 @@ Private Function op_concat(args As Variant) As Variant
     op_concat = r
 
 End Function
-
-'*****************
-'*** OPERATORS ***
-'*****************
 
 ' Matches operator !
 Private Function op_extern(args As Variant) As Variant
@@ -2588,4 +2602,3 @@ Private Function fn_version(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 0
     fn_version = Utils_ToMatrix(version)
 End Function
-

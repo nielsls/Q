@@ -26,14 +26,13 @@ Example usage
 
 Features
 -------------------
-  * All standard operators: :,::,+,-,\*,/,.*,./,^,.^,||,&&,|,&,<,<=,>,>=,==,~=,  
-  * Most used functions: <i>eye,zeros,ones,sum,cumsum,cumprod,prod,
-    mean,median,prctile,std,isequal,fix,rand,randn,repmat,reshape,find,sort,sqrt,exp,inv</i>...
-  * Indexing via e.g. `A(2,:)` or `A(5,3:end)`
-  * Concatenate matrices with '[ ]', i.e. `[ A B; C D ]`
-  * Multiple expressions separated by ";" or a line break.
-  * Excel functions: <i>if,iferror</i>
-  * Prefix function calls with ! to call external VBA functions not found in Q.
+* All standard operators: `: + - * / ^ .* ./ .^ || && | & < <= > >= == ~=` 
+* Most used functions: `eye,zeros,ones,sum,cumsum,cumprod,prod,mean,median,prctile, std,isequal,fix,rand,randn,repmat,reshape,find,sort,sqrt,exp,inv...`
+* Indexing via e.g. `A(2,:)` or `A(5,3:end)`
+* Concatenate matrices with '[ ]', i.e. `[ A B; C D ]`
+* Multiple expressions separated by ";" or a line break.
+* Excel functions: <i>if,iferror</i>
+* Prefix function calls with ! to call external VBA functions not found in Q.
 
 How to use
 -------------------

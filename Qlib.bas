@@ -34,11 +34,11 @@
 ' http://github.com/nielsls/Q
 '
 ' 2017, Niels Lykke Sørensen
-
+　
 Option Explicit
 Option Base 1
-
-Private Const version = "2.17"
+　
+Private Const version = "2.20"
     
 Private Const NUMERICS = "0123456789"
 Private Const ALPHAS = "abcdefghijklmnopqrstuvwxyz"
@@ -46,7 +46,7 @@ Private Const SINGLE_OPS = "()[],;:+-#'"
 Private Const COMBO_OPS = ".|&<>~=*/^!"
 Private Const DOUBLE_MAX = 1.79769313486231E+308
 Private Const DOUBLE_MIN = -1.79769313486231E+308
-
+　
 Private expression As String
 Private expressionIndex As Long
 Private currentToken As String
@@ -54,11 +54,11 @@ Private previousTokenIsSpace As Boolean
 Private arguments As Variant
 Private endValues As Variant ' A stack of numbers providing the right value of the "end" constant
 Private ans As Variant       ' Result of last answer when multiple expressions are used as input
-
+　
 ' Entry point - the only public function in the library
 Public Function Q(expr As Variant, ParamArray args() As Variant) As Variant
     On Error GoTo ErrorHandler
-
+　
     expression = expr
     arguments = args
     endValues = Empty
@@ -101,29 +101,16 @@ ErrorHandler:
         Err.Description & " in """ & expression & """"
     Q = "ERROR - " & Err.Description
 End Function
-
+　
 Private Function Utils_WasCalledFromCell() As Boolean
     Utils_WasCalledFromCell = TypeName(Application.Caller) <> "Error"
 End Function
-            
+　
 '*******************************************************************
-' This file consists of several parts:
-' 1) The lexer; functions prefixed with "Tokens_"
-'    Splits the input expression into its atomic parts
-' 2) The parser; functions prefixed with "Parse_"
-'    Parses the individual parts and builds an Abstract Syntax Tree
-' 3) A set of utilities; functions prefixed with "Utils_"
-' 4) The calc_tree() function; turns the AST into its final output value
-' 5) Operators; functions prefixed with "op_"
-'    Each operator has its own function
-' 6) Built-in functions; functions prefixed with "fn_"
-'    Each function has its own function (surprise!)
-'*******************************************************************
-            
-'*******************************************************************
-' RULES/INVARIANTS:
-'   - All variables must internally be 2-dimensional
-'   - All matrices (and thus all variables) are 1-based just as in MATLAB.
+' Evaluator invariants:
+'   - All variables, including scalars, are represented internally
+'     as 2-dimensional matrices
+'   - All matrices are 1-based just as in MATLAB.
 '   - Variable names: [A-Z]
 '   - Function names: [a-z][a-z0-9_]*
 '   - Numbers support e/E exponent
@@ -132,11 +119,11 @@ End Function
 '     Variant value Empty
 '     Missing parameters in function calls are given the value Empty
 '*******************************************************************
-
-'*************
-'*** LEXER ***
-'*************
-
+　
+'*********************
+'*** TOKEN CONTROL ***
+'*********************
+　
 Private Sub Tokens_Next()
     previousTokenIsSpace = Tokens_MoveCharPointer(" ")
     If expressionIndex > Len(expression) Then currentToken = "": Exit Sub
@@ -180,12 +167,12 @@ Private Sub Tokens_Next()
     Utils_Assert expressionIndex > startIndex Or expressionIndex > Len(expression), _
         "Illegal char: " & Mid(expression, expressionIndex, 1)
 End Sub
-
+　
 Private Sub Tokens_AssertAndNext(Token As String)
     Utils_Assert Token = currentToken, "missing token: " & Token
     Tokens_Next
 End Sub
-
+　
 Private Function Tokens_MoveCharPointer(str As String, _
     Optional stopWhenFound As Boolean = False, _
     Optional singleCharOnly As Boolean = False) As Boolean
@@ -196,11 +183,7 @@ Private Function Tokens_MoveCharPointer(str As String, _
         If singleCharOnly Then Exit Function
     Wend
 End Function
-                                                         
-'**************
-'*** PARSER ***
-'**************
-
+　
 'Returns true if token is a suitable operator
 Private Function Parse_FindBinaryOp(Token As String, ByRef op As Variant) As Boolean
     Parse_FindBinaryOp = True
@@ -230,7 +213,7 @@ Private Function Parse_FindBinaryOp(Token As String, ByRef op As Variant) As Boo
         Case Else: Parse_FindBinaryOp = False
     End Select
 End Function
-
+　
 Private Function Parse_FindUnaryPrefixOp(Token As String, ByRef op As Variant) As Boolean
     Parse_FindUnaryPrefixOp = True
     Select Case Token
@@ -242,7 +225,7 @@ Private Function Parse_FindUnaryPrefixOp(Token As String, ByRef op As Variant) A
         Case Else: Parse_FindUnaryPrefixOp = False
     End Select
 End Function
-
+　
 Private Function Parse_FindUnaryPostfixOp(Token As String, ByRef op As Variant) As Boolean
     Parse_FindUnaryPostfixOp = True
     Select Case Token
@@ -250,15 +233,15 @@ Private Function Parse_FindUnaryPostfixOp(Token As String, ByRef op As Variant) 
         Case Else: Parse_FindUnaryPostfixOp = False
     End Select
 End Function
-
+　
 Private Function Parse_Matrix() As Variant
     While currentToken <> "]"
-        Utils_Stack_Push Parse_List(True), Parse_Matrix
+        Utils_Stack_Push Array("fn_hcat", Parse_List(True)), Parse_Matrix
         If currentToken = ";" Then Tokens_Next
         Utils_Assert currentToken <> "", "Missing ']'"
     Wend
 End Function
-
+　
 Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Variant
     Do While InStr(";)]", currentToken) = 0
         If currentToken = "," Then
@@ -273,7 +256,7 @@ Private Function Parse_List(Optional isSpaceSeparator As Boolean = False) As Var
         End If
     Loop
 End Function
-
+　
 Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
     Parse_Binary = Parse_Prefix()
     Dim op: Do While Parse_FindBinaryOp(currentToken, op)
@@ -282,7 +265,7 @@ Private Function Parse_Binary(Optional lastPrec As Long = -999) As Variant
         Parse_Binary = Array("op_" & op(1), Array(Parse_Binary, Parse_Binary(CLng(op(2)))))
     Loop
 End Function
-
+　
 Private Function Parse_Prefix() As Variant
     Dim op
     If Parse_FindUnaryPrefixOp(currentToken, op) Then
@@ -292,7 +275,7 @@ Private Function Parse_Prefix() As Variant
         Parse_Prefix = Parse_Postfix()
     End If
 End Function
-
+　
 Private Function Parse_Postfix() As Variant
     Parse_Postfix = Parse_Atomic()
     Dim op: Do
@@ -308,7 +291,7 @@ Private Function Parse_Postfix() As Variant
         End If
     Loop While True
 End Function
-
+　
 Private Function Parse_Atomic() As Variant
     Utils_Assert currentToken <> "", "missing argument"
     Select Case Asc(currentToken) ' Filter on first char of token
@@ -351,7 +334,7 @@ Private Function Parse_Atomic() As Variant
             
         Case Asc("[")  ' Found a matrix concatenation
             Tokens_Next
-            Parse_Atomic = Array("op_concat", Parse_Matrix())
+            Parse_Atomic = Array("fn_vcat", Parse_Matrix())
             Tokens_AssertAndNext "]"
             
         Case Asc("""") ' Found a string constant
@@ -363,22 +346,22 @@ Private Function Parse_Atomic() As Variant
             
     End Select
 End Function
-
+　
 '*************
 '*** UTILS ***
 '*************
 Private Function MAX(a As Variant, b As Variant) As Variant
     If a > b Then MAX = a Else MAX = b
 End Function
-
+　
 Private Function MIN(a As Variant, b As Variant) As Variant
     If a < b Then MIN = a Else MIN = b
 End Function
-
+　
 Private Function IFF(expr As Boolean, alt1 As Variant, alt2 As Variant) As Variant
     If expr Then IFF = alt1 Else IFF = alt2
 End Function
-
+　
 Private Sub Utils_DumpTree(tree As Variant, Optional spacer As String = "")
     If Utils_Dimensions(tree) > 0 Then
         Dim leaf: For Each leaf In tree
@@ -388,7 +371,7 @@ Private Sub Utils_DumpTree(tree As Variant, Optional spacer As String = "")
         Debug.Print spacer & tree
     End If
 End Sub
-
+　
 Private Function Utils_Dimensions(v As Variant) As Long
     Dim dimnum As Long, errorCheck As Integer
     On Error GoTo FinalDimension
@@ -398,19 +381,19 @@ Private Function Utils_Dimensions(v As Variant) As Long
 FinalDimension:
     Utils_Dimensions = dimnum - 1
 End Function
-
+　
 Private Function Utils_Numel(v As Variant) As Long
     If Not IsEmpty(v) Then Utils_Numel = UBound(v, 1) * UBound(v, 2)
 End Function
-
+　
 Private Function Utils_Rows(ByRef v As Variant) As Long
     If Not IsEmpty(v) Then Utils_Rows = UBound(v, 1)
 End Function
-
+　
 Private Function Utils_Cols(ByRef v As Variant) As Long
     If Not IsEmpty(v) Then Utils_Cols = UBound(v, 2)
 End Function
-
+　
 Private Sub Utils_Size(v As Variant, ByRef r As Variant, ByRef c As Variant)
     If IsEmpty(v) Then
         r = 0
@@ -420,18 +403,18 @@ Private Sub Utils_Size(v As Variant, ByRef r As Variant, ByRef c As Variant)
         c = UBound(v, 2)
     End If
 End Sub
-
-' From 1-dim linear index to 2-dim subscripts in a column-major matrix
+　
+' From linear index to subscripts in a column-major matrix
 Private Sub Utils_Ind2Sub(rows As Long, ind As Long, ByRef i As Long, ByRef j As Long)
     j = (ind - 1) \ rows + 1
     i = ind - rows * (j - 1)
 End Sub
-
+　
 Private Function Utils_ToMatrix(val As Variant) As Variant
     Utils_ToMatrix = val
     Utils_Conform Utils_ToMatrix
 End Function
-
+　
 ' Makes sure that a scalar is transformed to a 1x1 matrix
 ' and a 1-dim vector is transformed to a 2-dim vector of size 1xN
 Private Sub Utils_Conform(ByRef v As Variant)
@@ -453,7 +436,7 @@ Private Sub Utils_Conform(ByRef v As Variant)
             Utils_Assert False, "dimension > 2"
     End Select
 End Sub
-
+　
 Private Sub Utils_Stack_Push(item As Variant, stack As Variant)
     On Error GoTo NotInitiated
     ReDim Preserve stack(LBound(stack) To UBound(stack) + 1)
@@ -462,41 +445,41 @@ Private Sub Utils_Stack_Push(item As Variant, stack As Variant)
 NotInitiated:
     stack = Array(item)
 End Sub
-
+　
 Private Function Utils_Stack_Pop(stack As Variant) As Variant
     Dim ub As Long: ub = UBound(stack)
     Dim lb As Long: lb = LBound(stack)
     Utils_Stack_Pop = stack(ub)
     If ub > lb Then ReDim Preserve stack(lb To ub - 1) Else stack = Null
 End Function
-
+　
 Private Function Utils_Stack_Peek(stack As Variant) As Variant
     Utils_Stack_Peek = stack(UBound(stack))
 End Function
-
+　
 Private Function Utils_Stack_Size(stack As Variant) As Long
     On Error Resume Next
     Utils_Stack_Size = UBound(stack)
 End Function
-
-Private Function Utils_RepScalar(ByRef mat As Variant, val As Variant, n As Long, m As Long) As Variant
+　
+Private Function Utils_RepScalar(ByRef out As Variant, val As Variant, n As Long, m As Long) As Variant
     Utils_Assert n >= 0 And m >= 0, "cannot create matrix with negative size"
     If n = 0 Or m = 0 Then Exit Function
-    ReDim mat(n, m)
-    For n = 1 To UBound(mat, 1)
-        For m = 1 To UBound(mat, 2)
-            mat(n, m) = val
+    ReDim out(n, m)
+    For n = 1 To UBound(out, 1)
+        For m = 1 To UBound(out, 2)
+            out(n, m) = val
         Next m
     Next n
 End Function
-
+　
 ' Transforms all entries in the vector from trees to values
 Private Sub Utils_CalcArgs(args As Variant)
     Dim i As Long: For i = 1 To Utils_Stack_Size(args)
         args(i) = calc_tree(args(i))
     Next i
 End Sub
-
+　
 ' Test if a flag was supplied in the args, i.e. such as "descend" in the sort function
 Private Function Utils_IsFlagSet(args As Variant, flag As String) As Boolean
     Dim i As Long
@@ -509,7 +492,7 @@ Private Function Utils_IsFlagSet(args As Variant, flag As String) As Boolean
         End If
     Next i
 End Function
-
+　
 'do cols -> return 0, do rows -> return 1
 Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Long = 2) As Long
     If UBound(args) >= dimIndex Then
@@ -520,7 +503,7 @@ Private Function Utils_CalcDimDirection(args As Variant, Optional dimIndex As Lo
     End If
     Utils_CalcDimDirection = -(Utils_Rows(args(1)) = 1)
 End Function
-
+　
 ' Returns the size of the return matrix in functions like zeros, rand, repmat, ...
 ' Size must be last in the args and can be either nothing, 1 scalar, 2 scalars or a vector with two scalars
 Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m As Long, Optional index As Long = 2)
@@ -545,7 +528,7 @@ Private Function Utils_GetSizeFromArgs(args As Variant, ByRef n As Long, ByRef m
             Utils_Assert False, "bad size input"
     End Select
 End Function
-
+　
 ' Easy way of obtaining the value of an optional argument
 Private Function Utils_GetOptionalScalarArg(args As Variant, index As Long, defaultValue As Variant)
     If index <= Utils_Stack_Size(args) Then
@@ -554,8 +537,10 @@ Private Function Utils_GetOptionalScalarArg(args As Variant, index As Long, defa
         Utils_GetOptionalScalarArg = defaultValue
     End If
 End Function
-
+　
 ' Do the initial calculations that are the same for every binary operation
+' Broadcasting is done, st. a matrix with size (n,m) will match all
+' matrices with size (1,m), (n,1) or (n,m).
 Private Function Utils_SetupBinaryOperation( _
         args As Variant, out As Variant, _
         ByRef r As Long, ByRef c As Long, _
@@ -566,7 +551,7 @@ Private Function Utils_SetupBinaryOperation( _
     Utils_Size args(1), arg1_r, arg1_c
     Utils_Size args(2), arg2_r, arg2_c
     Utils_Assert _
-        (arg1_r = 1 And arg1_c = 1) Or (arg2_r = 1 And arg2_c = 1) Or (arg1_r = arg2_r And arg1_c = arg2_c), _
+        (arg1_r = 1 Or arg2_r = 1 Or arg1_r = arg2_r) And (arg1_c = 1 Or arg2_c = 1 Or arg1_c = arg2_c), _
         "dimension mismatch"
     If arg1_r > 0 And arg2_r > 0 Then
         r = MAX(arg1_r, arg2_r)
@@ -576,14 +561,14 @@ Private Function Utils_SetupBinaryOperation( _
         r = 0: c = 0
     End If
 End Function
-
+　
 ' Do the initial processing for operations which reduce the dimension of a matrix.
 ' These includes sum, prod, mean, any, all, count etc...
 Private Sub Utils_SetupReducedDimOperation(ByRef args As Variant, ByRef mat As Variant, ByRef x As Long, Optional dimIndex As Long = 2)
     x = Utils_CalcDimDirection(args, dimIndex)
     ReDim mat(x * UBound(args(1), 1) + (1 - x), (1 - x) * UBound(args(1), 2) + x)
 End Sub
-
+　
 ' Is called from each Q function to ensure the given function has
 ' has been called with the right number of arguments
 Private Sub Utils_AssertArgsCount(args As Variant, lb As Long, ub As Long)
@@ -591,17 +576,17 @@ Private Sub Utils_AssertArgsCount(args As Variant, lb As Long, ub As Long)
     Utils_Assert size >= lb, "too few arguments"
     Utils_Assert size <= ub, "too many arguments"
 End Sub
-
+　
 ' Allows each Q function to fail gracefully with a nice error message.
 Private Sub Utils_Assert(expr As Boolean, Optional msg As String = "unknown error")
     If expr Then Exit Sub
     Err.Raise 999, , msg
 End Sub
-
+　
 '*****************
-'*** CALC TREE ***
+'*** CALC ROOT ***
 '*****************
-
+　
 ' calc_tree is responsible for turning the
 ' abstract syntax tree (AST) into an actual
 ' result.
@@ -616,16 +601,16 @@ End Sub
 ' as it is both slow and fucks up error
 ' propagation.
 Private Function calc_tree(root As Variant) As Variant
-    Dim prefix As String, Name As String
+    Dim prefix As String, name As String
     root(1) = Split(root(1), "_")
     prefix = root(1)(0)
-    Name = root(1)(1)
+    name = root(1)(1)
     
     Select Case prefix
     
     ' Non-functions
     Case "eval":
-        Select Case Name
+        Select Case name
         Case "constant":
             calc_tree = root(2)
         Case "variable":
@@ -643,11 +628,10 @@ Private Function calc_tree(root As Variant) As Variant
        
     ' Operators
     Case "op"
-        Select Case Name
+        Select Case name
         Case "and": calc_tree = op_and(root(2))
         Case "andshortcircuit": calc_tree = op_andshortcircuit(root(2))
         Case "colon": calc_tree = op_colon(root(2))
-        Case "concat": calc_tree = op_concat(root(2))
         Case "divide": calc_tree = op_divide(root(2))
         Case "eq": calc_tree = op_eq(root(2))
         Case "extern": calc_tree = op_extern(root(2))
@@ -675,8 +659,8 @@ Private Function calc_tree(root As Variant) As Variant
       
     ' Functions
     Case "fn"
-        If Name <> "if" And Name <> "iferror" And Name <> "expand" Then Utils_CalcArgs root(2)
-        Select Case Name
+        If name <> "if" And name <> "iferror" And name <> "expand" Then Utils_CalcArgs root(2)
+        Select Case name
         Case "all": calc_tree = fn_all(root(2))
         Case "any": calc_tree = fn_any(root(2))
         Case "arrayfun": calc_tree = fn_arrayfun(root(2))
@@ -699,6 +683,7 @@ Private Function calc_tree(root As Variant) As Variant
         Case "find": calc_tree = fn_find(root(2))
         Case "fix": calc_tree = fn_fix(root(2))
         Case "floor": calc_tree = fn_floor(root(2))
+        Case "hcat": calc_tree = fn_hcat(root(2))
         Case "if": calc_tree = fn_if(root(2))
         Case "iferror": calc_tree = fn_iferror(root(2))
         Case "inv": calc_tree = fn_inv(root(2))
@@ -739,27 +724,28 @@ Private Function calc_tree(root As Variant) As Variant
         Case "true": calc_tree = fn_true(root(2))
         Case "unique": calc_tree = fn_unique(root(2))
         Case "var": calc_tree = fn_var(root(2))
+        Case "vcat": calc_tree = fn_vcat(root(2))
         Case "version": calc_tree = fn_version(root(2))
         Case "xor": calc_tree = fn_xor(root(2))
         Case "zeros": calc_tree = fn_zeros(root(2))
         Case Else:
             Utils_Assert _
                 False, _
-                "unknown function """ & Name & """" _
-                    & IFF(Len(Name) = 1, "; did you mean variable " & UCase(Name) & "?", "")
+                "unknown function """ & name & """" _
+                    & IFF(Len(name) = 1, "; did you mean variable " & UCase(name) & "?", "")
         End Select
             
     End Select
 End Function
-
+　
 '*****************
 '*** OPERATORS ***
 '*****************
-
+　
 Private Function Utils_IsVectorShape(r As Long, c As Long) As Boolean
     Utils_IsVectorShape = (r = 1 And c > 1) Or (r > 1 And c = 1)
 End Function
-
+　
 Private Sub op_indexarg(root As Variant, endValue As Long, ByRef idx As Variant, ByRef r As Long, ByRef c As Long, ByRef t As Long)
     If root(1) = "eval_colon" Then
         t = 1
@@ -799,8 +785,8 @@ Private Sub op_indexarg(root As Variant, endValue As Long, ByRef idx As Variant,
         
     End If
 End Sub
-
-' Evaluates matrix indexing/subsetting, ()
+　
+' Evaluates matrix indexing/subsetting
 Private Function op_index(args As Variant) As Variant
     Dim out As Variant, out_i As Long, out_j As Long
     Dim arg_r As Long, arg_c As Long
@@ -866,67 +852,10 @@ Private Function op_index(args As Variant) As Variant
             Utils_Assert False, "too many indices"
     
     End Select
-
+　
     op_index = out
 End Function
-
-' Evaluates matrix concatenation []
-Private Function op_concat(args As Variant) As Variant
-
-    ' Get matrices and check their sizes are compatible for concatenation
-    Dim totalRows As Long, totalCols As Long
-    Dim requiredRows As Long, requiredCols As Long
-    Dim rows As Long, cols As Long, i As Long, j As Long
-    requiredCols = 0
-    For i = 1 To Utils_Stack_Size(args) ' loop over each row
-        totalCols = 0
-        requiredRows = 0
-        For j = 1 To Utils_Stack_Size(args(i)) ' loop over each column
-            args(i)(j) = calc_tree(args(i)(j))
-            Utils_Size args(i)(j), rows, cols
-            If requiredRows = 0 Then
-                requiredRows = rows
-            Else
-                Utils_Assert requiredRows = rows Or rows = 0, "concatenation: different row counts"
-            End If
-            totalCols = totalCols + cols
-        Next j
-        If requiredCols = 0 Then
-            requiredCols = totalCols
-        Else
-            Utils_Assert requiredCols = totalCols Or totalCols = 0, "concatenation: different column counts"
-        End If
-        totalRows = totalRows + requiredRows
-    Next i
-    totalCols = requiredCols 'Needed in case last row was []
-    
-    ' Perform the actual concatenation by copying input matrices
-    If totalRows = 0 Or totalCols = 0 Then Exit Function
-    Dim r: ReDim r(totalRows, totalCols)
-    Dim x As Long, y As Long
-    totalRows = 0
-    For i = 1 To Utils_Stack_Size(args)
-        totalCols = 0
-        For j = 1 To Utils_Stack_Size(args(i))
-            If IsEmpty(args(i)(j)) Then
-                rows = 0
-                cols = 0
-            Else
-                Utils_Size args(i)(j), rows, cols
-                For x = 1 To rows
-                    For y = 1 To cols
-                        r(totalRows + x, totalCols + y) = args(i)(j)(x, y)
-                    Next y
-                Next x
-            End If
-            totalCols = totalCols + cols
-        Next j
-        totalRows = totalRows + rows
-    Next i
-    op_concat = r
-
-End Function
-
+　
 ' Matches operator !
 Private Function op_extern(args As Variant) As Variant
     args(1)(1) = Mid(args(1)(1), 4)
@@ -948,7 +877,7 @@ Private Function op_extern(args As Variant) As Variant
     End Select
     Utils_Conform op_extern
 End Function
-
+　
 ' Matches operator ||
 Private Function op_orshortcircuit(args As Variant) As Variant
     args(1) = calc_tree(args(1))
@@ -967,7 +896,7 @@ Private Function op_orshortcircuit(args As Variant) As Variant
 ErrorHandler:
     Utils_Assert False, "||: could not convert argument to boolean value"
 End Function
-
+　
 ' Matches operator &&
 Private Function op_andshortcircuit(args As Variant) As Variant
     args(1) = calc_tree(args(1))
@@ -986,7 +915,7 @@ Private Function op_andshortcircuit(args As Variant) As Variant
 ErrorHandler:
     Utils_Assert False, "&&: could not convert argument to boolean value"
 End Function
-
+　
 ' Matches operator &
 Private Function op_and(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1000,7 +929,7 @@ Private Function op_and(args As Variant) As Variant
     Next i
     op_and = out
 End Function
-
+　
 ' Matches operator |
 Private Function op_or(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1014,7 +943,7 @@ Private Function op_or(args As Variant) As Variant
     Next i
     op_or = out
 End Function
-
+　
 ' Matches operator <
 Private Function op_lt(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1028,7 +957,7 @@ Private Function op_lt(args As Variant) As Variant
     Next i
     op_lt = out
 End Function
-
+　
 ' Matches operator <=
 Private Function op_lte(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1042,7 +971,7 @@ Private Function op_lte(args As Variant) As Variant
     Next i
     op_lte = out
 End Function
-
+　
 ' Matches operator >
 Private Function op_gt(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1056,7 +985,7 @@ Private Function op_gt(args As Variant) As Variant
     Next i
     op_gt = out
 End Function
-
+　
 ' Matches operator >=
 Private Function op_gte(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1070,7 +999,7 @@ Private Function op_gte(args As Variant) As Variant
     Next i
     op_gte = out
 End Function
-
+　
 ' Matches operators = and ==
 Private Function op_eq(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1084,7 +1013,7 @@ Private Function op_eq(args As Variant) As Variant
     Next i
     op_eq = out
 End Function
-
+　
 ' Matches operator ~=
 Private Function op_ne(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1098,7 +1027,7 @@ Private Function op_ne(args As Variant) As Variant
     Next i
     op_ne = out
 End Function
-
+　
 ' Matches operator ~
 Private Function op_negate(args As Variant) As Variant
     Dim r As Long, c As Long, i As Long, j As Long
@@ -1111,7 +1040,7 @@ Private Function op_negate(args As Variant) As Variant
     Next i
     op_negate = args(1)
 End Function
-
+　
 ' Matches operator : with one or two arguments
 Private Function op_colon(args As Variant) As Variant
     Dim m As Long, i As Long, step As Double, start As Double, last As Double
@@ -1134,7 +1063,7 @@ Private Function op_colon(args As Variant) As Variant
     Next i
     op_colon = r
 End Function
-
+　
 ' Matches operator +
 Private Function op_plus(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1148,12 +1077,12 @@ Private Function op_plus(args As Variant) As Variant
     Next i
     op_plus = out
 End Function
-
+　
 ' Matches unary operator +
 Private Function op_uplus(args As Variant) As Variant
     op_uplus = calc_tree(args(1))
 End Function
-
+　
 ' Matches binary operator -
 Private Function op_minus(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1167,7 +1096,7 @@ Private Function op_minus(args As Variant) As Variant
     Next i
     op_minus = out
 End Function
-
+　
 ' Matches prefix unary operator -
 Private Function op_uminus(args As Variant) As Variant
     Dim i As Long, j As Long, r As Long, c As Long
@@ -1180,7 +1109,7 @@ Private Function op_uminus(args As Variant) As Variant
     Next i
     op_uminus = args(1)
 End Function
-
+　
 ' Matches operator *
 Private Function op_mtimes(args As Variant) As Variant
     Utils_CalcArgs args
@@ -1203,7 +1132,7 @@ Private Function op_mtimes(args As Variant) As Variant
         op_mtimes = out
     End If
 End Function
-
+　
 ' Matches operator .*
 Private Function op_times(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1217,7 +1146,7 @@ Private Function op_times(args As Variant) As Variant
     Next i
     op_times = out
 End Function
-
+　
 ' Matches operator /
 Private Function op_mdivide(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1231,7 +1160,7 @@ Private Function op_mdivide(args As Variant) As Variant
     Next i
     op_mdivide = out
 End Function
-
+　
 ' Matches operator ./
 Private Function op_divide(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1245,7 +1174,7 @@ Private Function op_divide(args As Variant) As Variant
     Next i
     op_divide = out
 End Function
-
+　
 ' Matches operator ^
 Private Function op_mpower(args As Variant) As Variant
     Utils_CalcArgs args
@@ -1254,10 +1183,10 @@ Private Function op_mpower(args As Variant) As Variant
     If r1 = 1 And c1 = 1 And r2 = 1 And c2 = 1 Then
         op_mpower = Utils_ToMatrix(args(1)(1, 1) ^ args(2)(1, 1))
     Else
-        Utils_Assert False, "operator ^: input must be scalars"
+        Utils_Assert False, "operator ^: input must be scalars" & r1 & " " & c1 & " " & r2 & " " & c2 & " "
     End If
 End Function
-
+　
 ' Matches operator .^
 Private Function op_power(args As Variant) As Variant
     Dim out, r As Long, c As Long, i As Long, j As Long
@@ -1271,7 +1200,7 @@ Private Function op_power(args As Variant) As Variant
     Next i
     op_power = out
 End Function
-
+　
 ' Matches postfix unary operator '
 Private Function op_transpose(args As Variant) As Variant
     args(1) = calc_tree(args(1))
@@ -1279,17 +1208,17 @@ Private Function op_transpose(args As Variant) As Variant
     op_transpose = WorksheetFunction.transpose(args(1))
     Utils_Conform op_transpose
 End Function
-
+　
 ' Matches operator #
 Private Function op_numel(args As Variant) As Variant
     op_numel = Utils_ToMatrix(Utils_Numel(calc_tree(args(1))))
 End Function
-
-
+　
+　
 '*****************
 '*** FUNCTIONS ***
 '*****************
-
+　
 ' b = isempty(A)
 '
 ' Returns true if A equals the empty matrix [].
@@ -1297,7 +1226,7 @@ Private Function fn_isempty(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     fn_isempty = Utils_ToMatrix(IsEmpty(args(1)))
 End Function
-
+　
 ' b = isequal(A,B)
 '
 ' Returns true if A and B are equal
@@ -1320,7 +1249,7 @@ Private Function fn_isequal(args As Variant) As Variant
     Next i
     fn_isequal = Utils_ToMatrix(True)
 End Function
-
+　
 ' b = islogical(A)
 '
 ' b = islogical(A) returns true if all elements of A are boolean values.
@@ -1340,7 +1269,7 @@ Private Function fn_islogical(args As Variant) As Variant
     End With
     fn_islogical = Utils_ToMatrix(True)
 End Function
-
+　
 ' X = isnum(A)
 '
 ' X = isnum(A) returns a matrix with the same size as A
@@ -1356,7 +1285,7 @@ Private Function fn_isnum(args As Variant) As Variant
     Next i
     fn_isnum = args(1)
 End Function
-
+　
 ' X = iserror(A)
 '
 ' X = iserror(A) returns a matrix same size as A indicating
@@ -1372,7 +1301,7 @@ Private Function fn_iserror(args As Variant) As Variant
     Next i
     fn_iserror = args(1)
 End Function
-
+　
 ' I = find(X)
 ' I = find(X,k)
 ' I = find(X,k,"first")
@@ -1412,7 +1341,7 @@ Private Function fn_find(args As Variant) As Variant
 found_all:
     fn_find = r
 End Function
-
+　
 ' X = fix(A)
 '
 ' X = fix(A) rounds the elements of A towards 0.
@@ -1429,7 +1358,7 @@ Private Function fn_fix(args As Variant) As Variant
     End With
     fn_fix = args(1)
 End Function
-
+　
 ' X = round(A)
 ' X = round(A,k)
 '
@@ -1449,7 +1378,7 @@ Private Function fn_round(args As Variant) As Variant
     End With
     fn_round = args(1)
 End Function
-
+　
 ' X = ceil(A)
 '
 ' X = ceil(A) rounds each element of A to the nearest integer greater than
@@ -1467,7 +1396,7 @@ Private Function fn_ceil(args As Variant) As Variant
     End With
     fn_ceil = args(1)
 End Function
-
+　
 ' X = floor(A)
 '
 ' X = floor(A) rounds each element of A to the nearest integer smaller than
@@ -1485,14 +1414,14 @@ Private Function fn_floor(args As Variant) As Variant
     End With
     fn_floor = args(1)
 End Function
-
+　
 Private Function fn_inv(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     Utils_Assert UBound(args(1), 1) = UBound(args(1), 2), "matrix not quadratic"
     fn_inv = WorksheetFunction.MInverse(args(1))
     Utils_Conform fn_inv
 End Function
-
+　
 ' X = exp(A)
 '
 ' X = exp(A) returns the exponential for each element of A.
@@ -1507,7 +1436,7 @@ Private Function fn_exp(args As Variant) As Variant
     Next i
     fn_exp = args(1)
 End Function
-
+　
 ' X = log(A)
 '
 ' X = log(A) returns the natural logarithm of the elements of A.
@@ -1522,7 +1451,7 @@ Private Function fn_log(args As Variant) As Variant
     Next i
     fn_log = args(1)
 End Function
-
+　
 ' X = sqrt(A)
 '
 ' X = sqrt(A) returns the square root of the elements of A.
@@ -1537,7 +1466,7 @@ Private Function fn_sqrt(args As Variant) As Variant
     Next i
     fn_sqrt = args(1)
 End Function
-
+　
 ' r = rows(A)
 '
 ' r = rows(A) returns the number of rows in A.
@@ -1545,7 +1474,7 @@ Private Function fn_rows(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     fn_rows = Utils_ToMatrix(Utils_Rows(args(1)))
 End Function
-
+　
 ' c = cols(A)
 '
 ' c = cols(A) returns the number of columns in A.
@@ -1553,7 +1482,7 @@ Private Function fn_cols(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     fn_cols = Utils_ToMatrix(Utils_Cols(args(1)))
 End Function
-
+　
 ' n = numel(A)
 '
 ' n = numel(A) returns the number of elements in A.
@@ -1561,7 +1490,7 @@ Private Function fn_numel(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     fn_numel = Utils_ToMatrix(Utils_Numel(args(1)))
 End Function
-
+　
 ' X = zeros
 ' X = zeros(n)
 ' X = zeros(n,m)
@@ -1574,7 +1503,7 @@ Private Function fn_zeros(args As Variant) As Variant
     Utils_GetSizeFromArgs args, n, m, 1
     Utils_RepScalar fn_zeros, 0, n, m
 End Function
-
+　
 ' X = ones
 ' X = ones(n)
 ' X = ones(m,n)
@@ -1587,7 +1516,7 @@ Private Function fn_ones(args As Variant) As Variant
     Utils_GetSizeFromArgs args, n, m, 1
     Utils_RepScalar fn_ones, 1, n, m
 End Function
-
+　
 ' X = eye
 ' X = eye(n)
 ' X = eye(n,m)
@@ -1608,7 +1537,7 @@ Private Function fn_eye(args As Variant) As Variant
     Next n
     fn_eye = r
 End Function
-
+　
 ' X = true
 ' X = true(n)
 ' X = true(m,n)
@@ -1621,7 +1550,7 @@ Private Function fn_true(args As Variant) As Variant
     Utils_GetSizeFromArgs args, n, m, 1
     Utils_RepScalar fn_true, True, n, m
 End Function
-
+　
 ' X = false
 ' X = false(n)
 ' X = false(m,n)
@@ -1634,7 +1563,7 @@ Private Function fn_false(args As Variant) As Variant
     Utils_GetSizeFromArgs args, n, m, 1
     Utils_RepScalar fn_false, False, n, m
 End Function
-
+　
 ' X = linspace(x1,x2)
 ' X = linspace(x1,x2,n)
 '
@@ -1652,7 +1581,7 @@ Private Function fn_linspace(args As Variant) As Variant
     Next i
     fn_linspace = out
 End Function
-
+　
 ' X = xor(A,B)
 Private Function fn_xor(args As Variant) As Variant
     Utils_AssertArgsCount args, 2, 2
@@ -1667,7 +1596,7 @@ Private Function fn_xor(args As Variant) As Variant
     Next i
     fn_xor = out
 End Function
-
+　
 ' X = tick2ret(A)
 ' X = tick2ret(A,dim)
 '
@@ -1684,7 +1613,7 @@ Private Function fn_tick2ret(args As Variant) As Variant
     Next i
     fn_tick2ret = r
 End Function
-
+　
 ' X = ret2tick(A)
 ' X = ret2tick(A,dim)
 '
@@ -1705,7 +1634,7 @@ Private Function fn_ret2tick(args As Variant) As Variant
     Next i
     fn_ret2tick = r
 End Function
-
+　
 ' B = cumsum(A)
 ' B = cumsum(A,dim)
 '
@@ -1731,7 +1660,7 @@ Private Function fn_cumsum(args As Variant) As Variant
     Next i
     fn_cumsum = args(1)
 End Function
-
+　
 ' B = cumprod(A)
 ' B = cumprod(A,dim)
 '
@@ -1757,7 +1686,7 @@ Private Function fn_cumprod(args As Variant) As Variant
     Next i
     fn_cumprod = args(1)
 End Function
-
+　
 ' B = cummax(A)
 ' B = cummax(A,dim)
 Private Function fn_cummax(args As Variant) As Variant
@@ -1772,7 +1701,7 @@ Private Function fn_cummax(args As Variant) As Variant
     Next i
     fn_cummax = args(1)
 End Function
-
+　
 ' B = cummin(A)
 ' B = cummin(A,dim)
 Private Function fn_cummin(args As Variant) As Variant
@@ -1787,7 +1716,7 @@ Private Function fn_cummin(args As Variant) As Variant
     Next i
     fn_cummin = args(1)
 End Function
-
+　
 ' X = std(A)
 ' X = std(A,dim)
 '
@@ -1808,7 +1737,7 @@ Private Function fn_std(args As Variant) As Variant
     End With
     fn_std = out
 End Function
-
+　
 ' X = var(A)
 ' X = var(A,dim)
 '
@@ -1829,7 +1758,7 @@ Private Function fn_var(args As Variant) As Variant
     End With
     fn_var = out
 End Function
-
+　
 ' X = corr(A)
 '
 ' X = corr(A) returns a correlation matrix for the columns of A.
@@ -1850,7 +1779,7 @@ Private Function fn_corr(args As Variant) As Variant
     End With
     fn_corr = out
 End Function
-
+　
 ' X = cov(A)
 '
 ' X = cov(A) returns a covariance matrix for the columns of A.
@@ -1870,7 +1799,7 @@ Private Function fn_cov(args As Variant) As Variant
     End With
     fn_cov = out
 End Function
-
+　
 ' X = all(A)
 ' X = all(A,dim)
 '
@@ -1889,7 +1818,7 @@ Private Function fn_all(args As Variant) As Variant
     End With
     fn_all = r
 End Function
-
+　
 ' X = any(A)
 ' X = any(A,dim)
 '
@@ -1908,7 +1837,7 @@ Private Function fn_any(args As Variant) As Variant
     End With
     fn_any = r
 End Function
-
+　
 ' X = sum(A)
 ' X = sum(A,dim)
 '
@@ -1924,12 +1853,12 @@ Private Function fn_sum(args As Variant) As Variant
     Utils_SetupReducedDimOperation args, r, x
     With WorksheetFunction
         For i = 1 To UBound(r, 2 - x)
-            r(x * i + (1 - x), (1 - x) * i + x) = .sum(.index(args(1), x * i, (1 - x) * i))
+            r(x * i + (1 - x), (1 - x) * i + x) = .Sum(.index(args(1), x * i, (1 - x) * i))
         Next i
     End With
     fn_sum = r
 End Function
-
+　
 ' X = prod(A)
 ' X = prod(A,dim)
 '
@@ -1950,7 +1879,7 @@ Private Function fn_prod(args As Variant) As Variant
     End With
     fn_prod = r
 End Function
-
+　
 ' X = mean(A)
 ' X = mean(A,dim)
 Private Function fn_mean(args As Variant) As Variant
@@ -1964,7 +1893,7 @@ Private Function fn_mean(args As Variant) As Variant
     End With
     fn_mean = r
 End Function
-
+　
 ' X = median(A)
 ' X = median(A,dim)
 Private Function fn_median(args As Variant) As Variant
@@ -1978,7 +1907,7 @@ Private Function fn_median(args As Variant) As Variant
     End With
     fn_median = r
 End Function
-
+　
 ' X = prctile(A,p)
 ' X = prctile(A,p,dim)
 '
@@ -1994,7 +1923,7 @@ Private Function fn_prctile(args As Variant) As Variant
     End With
     fn_prctile = r
 End Function
-
+　
 ' X = percentrank(A,x)
 ' X = percentrank(A,x,dim)
 '
@@ -2010,7 +1939,7 @@ Private Function fn_percentrank(args As Variant) As Variant
     End With
     fn_percentrank = r
 End Function
-
+　
 ' X = count(A)
 ' X = count(A,dim)
 '
@@ -2028,7 +1957,7 @@ Private Function fn_count(args As Variant) As Variant
     Next i
     fn_count = r
 End Function
-
+　
 ' M = max(A)
 ' M = max(A,[],dim)
 ' M = max(A,B)
@@ -2060,7 +1989,7 @@ Private Function fn_max(args As Variant) As Variant
     End If
     fn_max = r
 End Function
-
+　
 ' M = min(A)
 ' M = min(A,[],dim)
 ' M = min(A,B)
@@ -2092,7 +2021,7 @@ Private Function fn_min(args As Variant) As Variant
     End If
     fn_min = r
 End Function
-
+　
 ' X = size(A)
 '
 ' X = size(A) returns a 1-by-2 vector with the number of rows and columns in A.
@@ -2102,7 +2031,7 @@ Private Function fn_size(args As Variant) As Variant
     Utils_Size args(1), out(1, 1), out(1, 2)
     fn_size = out
 End Function
-
+　
 ' X = diag(A)
 '
 ' X = diag(A) returns a matrix with A in the diagonal if A is a vector,
@@ -2124,7 +2053,7 @@ Private Function fn_diag(args As Variant) As Variant
     End If
     fn_diag = r
 End Function
-
+　
 ' X = rand
 ' X = rand(n)
 ' X = rand(n,m)
@@ -2145,7 +2074,7 @@ Private Function fn_rand(args As Variant) As Variant
     Next n
     fn_rand = out
 End Function
-
+　
 ' X = randi(imax)
 ' X = randi(imax,n)
 ' X = randi(imax,n,m)
@@ -2175,7 +2104,7 @@ Private Function fn_randi(args As Variant) As Variant
     Next n
     fn_randi = out
 End Function
-
+　
 ' X = randn
 ' X = randn(n)
 ' X = randn(n,m)
@@ -2208,7 +2137,7 @@ Private Function fn_randn(args As Variant) As Variant
     Next n
     fn_randn = r
 End Function
-
+　
 ' X = normcdf(A)
 Private Function fn_normcdf(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
@@ -2223,7 +2152,7 @@ Private Function fn_normcdf(args As Variant) As Variant
     End With
     fn_normcdf = args(1)
 End Function
-
+　
 ' X = repmat(A,n)
 ' X = repmat(A,n,m)
 ' X = repmat(A,[n m])
@@ -2249,7 +2178,7 @@ Private Function fn_repmat(args As Variant) As Variant
     Next n
     fn_repmat = out
 End Function
-
+　
 ' B = reshape(A,n,m)
 ' B = reshape(A,[],m)
 ' B = reshape(A,n,[])
@@ -2288,7 +2217,81 @@ Private Function fn_reshape(args As Variant) As Variant
     Next idx
     fn_reshape = r
 End Function
-
+　
+' M = hcat(A, B, C, ...)
+'
+' hcat concatenates scalars and matrices horizontally
+' Parameters must either be scalars or matrices with the same number of rows
+' Scalars are expanded to a column vector with the correct number of identical entries
+' hcat(A,B,C) is equivalent to [ A B C ]
+Private Function fn_hcat(args As Variant) As Variant
+    Dim arg_count As Long
+    arg_count = Utils_Stack_Size(args)
+    If arg_count = 0 Then Exit Function
+    If arg_count = 1 Then
+        fn_hcat = args(1)
+        Exit Function
+    End If
+    Dim rows As Long, cols As Long, i As Long, r As Long, c As Long
+    For i = 1 To arg_count
+        Utils_Size args(i), r, c
+        Utils_Assert rows = 0 Or rows = 1 Or r = 0 Or r = 1 Or rows = r, "hcat: different row counts"
+        rows = MAX(rows, r)
+        cols = cols + c
+    Next i
+    If rows = 0 Or cols = 0 Then Exit Function
+    Dim out, n As Long, m As Long
+    ReDim out(1 To rows, 1 To cols)
+    cols = 0
+    For i = 1 To arg_count
+        Utils_Size args(i), r, c
+        For n = 1 To rows
+            For m = 1 To c
+                out(n, cols + m) = args(i)(MIN(n, r), m)
+            Next m
+        Next n
+        cols = cols + c
+    Next i
+    fn_hcat = out
+End Function
+　
+' M = vcat(A, B, C, ...)
+'
+' hcat concatenates scalars and matrices vertically
+' Parameters must either be scalars or matrices with the same number of columns
+' Scalars are expanded to a row vector with the correct number of identical entries
+' vcat(A,B,C) is equivalent to [ A; B; C ]
+Private Function fn_vcat(args As Variant) As Variant
+    Dim arg_count As Long
+    arg_count = Utils_Stack_Size(args)
+    If arg_count = 0 Then Exit Function
+    If arg_count = 1 Then
+        fn_vcat = args(1)
+        Exit Function
+    End If
+    Dim rows As Long, cols As Long, i As Long, r As Long, c As Long
+    For i = 1 To arg_count
+        Utils_Size args(i), r, c
+        Utils_Assert cols = 0 Or cols = 1 Or c = 0 Or c = 1 Or cols = c, "vcat: different column counts"
+        cols = MAX(cols, c)
+        rows = rows + r
+    Next i
+    If rows = 0 Or cols = 0 Then Exit Function
+    Dim out, n As Long, m As Long
+    ReDim out(1 To rows, 1 To cols)
+    rows = 0
+    For i = 1 To arg_count
+        Utils_Size args(i), r, c
+        For n = 1 To r
+            For m = 1 To cols
+                out(rows + n, m) = args(i)(n, MIN(m, c))
+            Next m
+        Next n
+        rows = rows + r
+    Next i
+    fn_vcat = out
+End Function
+　
 ' X = tostring(A)
 '
 ' tostring(A) converts all entries of A into strings
@@ -2303,7 +2306,7 @@ Private Function fn_tostring(args As Variant) As Variant
     Next i
     fn_tostring = args(1)
 End Function
-
+　
 ' Z = if(B,X,Y)
 '
 ' Z = if(B,X,Y) returns X if B evaluates to true; otherwise Y.
@@ -2317,7 +2320,7 @@ Private Function fn_if(args As Variant) As Variant
         fn_if = calc_tree(args(3 + CLng(CBool(args(1)(1, 1)))))
     End If
 End Function
-
+　
 ' X = iferror(A,B)
 '
 ' X = iferror(A,B) returns A if the evaluation of A does not result in a error;
@@ -2330,7 +2333,7 @@ Private Function fn_iferror(args As Variant) As Variant
 ErrorHandler:
     fn_iferror = calc_tree(args(2))
 End Function
-
+　
 ' Y = diff(X)
 ' Y = diff(X,n)
 ' Y = diff(X,n,dim)
@@ -2350,11 +2353,11 @@ Private Function fn_diff(args As Variant) As Variant
     Dim n As Long: n = Utils_GetOptionalScalarArg(args, 2, 1)
     If n > 1 Then fn_diff = fn_diff(Array(r, n - 1, 1 + x))
 End Function
-
+　
 ' B = unique(A)
 '
 ' B = unique(A) returns a column vector with all the unique elements of A.
-' The values of B are in sorted order.
+' The values of B will be in sorted order.
 Private Function fn_unique(args As Variant) As Variant
     Utils_AssertArgsCount args, 1, 1
     Dim numel As Long, i As Long, counter As Long, save
@@ -2379,7 +2382,7 @@ Private Function fn_unique(args As Variant) As Variant
     Next i
     fn_unique = r
 End Function
-
+　
 ' B = sort(A)
 ' B = sort(A,dim)
 ' B = sort(...,"descend")
@@ -2440,7 +2443,7 @@ Private Function fn_sort(args As Variant) As Variant
     If sortRows Then fn_sort = WorksheetFunction.transpose(fn_sort)
     Utils_Conform fn_sort
 End Function
-
+　
 ' Implementation of the quick-sort algorithm - is a helper for fn_sort()
 ' Sorts on columns by swapping indices.
 ' No actual swapping of values in the original matrix is done.
@@ -2471,7 +2474,7 @@ Private Function Utils_QuickSortCol(arr As Variant, indices As Variant, first As
     Utils_QuickSortCol arr, indices, first, right, col, ascend
     Utils_QuickSortCol arr, indices, left, last, col, ascend
 End Function
-
+　
 ' Called from Utils_QuickSortCol. Compares numerics and strings.
 Private Function Utils_Compare(arg1 As Variant, arg2 As Variant) As Variant
     If IsNumeric(arg1) Then
@@ -2488,7 +2491,7 @@ Private Function Utils_Compare(arg1 As Variant, arg2 As Variant) As Variant
         End If
     End If
 End Function
-
+　
 ' X = arrayfun(func,A1,...,An)
 '
 ' arrayfun(...) calls the in-cell Excel function with name <func> and passes elements from
@@ -2517,7 +2520,7 @@ Private Function fn_arrayfun(args As Variant) As Variant
     Next r1
     fn_arrayfun = r
 End Function
-
+　
 ' B = join(A)
 ' B = join(A,joiner)
 ' B = join(A,joiner,dim)
@@ -2543,7 +2546,7 @@ Private Function fn_join(args As Variant) As Variant
     Next i
     fn_join = r
 End Function
-
+　
 ' B = fn_expand(A)
 ' B = fn_expand(A,n)
 ' B = fn_expand(A,,m)
@@ -2565,7 +2568,7 @@ Private Function fn_expand(args As Variant) As Variant
         If IsEmpty(cell.Offset(1, 0)) Then
             rows = 1
         Else
-            rows = cell.End(xlDown).Row - cell.Row + 1
+            rows = cell.End(xlDown).row - cell.row + 1
         End If
     Else
         rows = rows(1, 1)
@@ -2575,7 +2578,7 @@ Private Function fn_expand(args As Variant) As Variant
         If IsEmpty(cell.Offset(0, 1)) Then
             cols = 1
         Else
-            cols = cell.End(xlToRight).Column - cell.Column + 1
+            cols = cell.End(xlToRight).column - cell.column + 1
         End If
     Else
         cols = cols(1, 1)
@@ -2584,17 +2587,17 @@ Private Function fn_expand(args As Variant) As Variant
     fn_expand = cell.Resize(rows, cols)
     Utils_Conform fn_expand
 End Function
-
+　
 Private Function fn_e(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 0
     fn_e = Utils_ToMatrix(Exp(1))
 End Function
-
+　
 Private Function fn_pi(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 0
     fn_pi = Utils_ToMatrix(WorksheetFunction.Pi())
 End Function
-
+　
 ' v = version
 '
 ' Returns a string with the current version of the Q library.
@@ -2602,3 +2605,6 @@ Private Function fn_version(args As Variant) As Variant
     Utils_AssertArgsCount args, 0, 0
     fn_version = Utils_ToMatrix(version)
 End Function
+　
+　
+　
